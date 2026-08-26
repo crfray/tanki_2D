@@ -1387,12 +1387,15 @@ function applyMode(){
   const m = CONFIG.modes[GAME.mode];
   targetWord.textContent = m.word;
   targetInput.value = m.defTarget;
-  document.querySelectorAll('.mode').forEach(b =>
+  document.querySelectorAll('.mode[data-mode]').forEach(b =>
     b.classList.toggle('is-on', b.dataset.mode === GAME.mode));
   goalEl.textContent = `${m.name} · до ${m.defTarget} ${m.word}`;
 }
 
-document.querySelectorAll('.mode').forEach(btn => {
+// Ловим ТОЛЬКО кнопки режима: класс .mode — это оформление, его носят и
+// кнопки гаража. Без фильтра по data-mode клик по «Гаражу» ставил
+// GAME.mode = undefined, и дальше не считались ни фраги, ни флаги.
+document.querySelectorAll('.mode[data-mode]').forEach(btn => {
   btn.addEventListener('click', () => {
     GAME.mode = btn.dataset.mode;
     applyMode();
