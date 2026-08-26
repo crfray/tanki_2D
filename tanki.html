@@ -156,6 +156,8 @@
         CTF: победа только по числу захватов (убийства больше не
         приближают к победе). Индикация носильщика — кольцо в цвете
         флага и поднятое древко. Брошенный флаг возвращается через 20 с.
+        Похититель может снова подобрать упавший флаг и продолжить
+        занос (после респавна в том числе).
    0.9  Два режима боя на выбор: Death Match и Capture the Flag.
         Условие победы задаётся числом в меню перед стартом.
         В CTF появились базы, флаги, подбор и возврат; бот в этом
@@ -779,15 +781,24 @@ function updateCTF(dt, tanks){
       }
     }
 
-    // 2. Брошенный флаг сам возвращается домой через время.
+    // 2. Брошенный флаг: три исхода. Приоритет у защиты — если рядом
+    //    оказался ХОЗЯИН, флаг сразу возвращается домой. Иначе его может
+    //    снова подобрать ПОХИТИТЕЛЬ (в том числе тот же, кого убили, —
+    //    после респавна вернулся и продолжает занос). Не тронули никто —
+    //    сам уедет домой по таймеру.
     else if (flag.state === 'dropped'){
       flag.timer -= dt;
-      const back = flag.timer <= 0 ||
-        (owner.alive && Math.hypot(owner.x - flag.x, owner.y - flag.y) < CONFIG.ctf.pickup);
-      if (back){                                     // хозяин коснулся — вернулся сразу
+      const ownerTouch = owner.alive &&
+        Math.hypot(owner.x - flag.x, owner.y - flag.y) < CONFIG.ctf.pickup;
+      const thiefTouch = thief.alive &&
+        Math.hypot(thief.x - flag.x, thief.y - flag.y) < CONFIG.ctf.pickup;
+
+      if (flag.timer <= 0 || ownerTouch){            // домой: таймер или хозяин коснулся
         flag.state = 'home';
         flag.x = BASES[side].x;
         flag.y = BASES[side].y;
+      } else if (thiefTouch){                         // похититель поднял снова — несёт дальше
+        flag.state = 'carried';
       }
     }
 
