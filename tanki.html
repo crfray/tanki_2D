@@ -318,6 +318,12 @@ const CONFIG = {
     range: 1400,        // дальность луча
     beamTime: 0.55,     // сколько секунд след испаряется после выстрела
 
+    // Зубчики поверх луча. Сам луч остаётся ПРЯМОЙ линией — зубцы идут
+    // отдельным тонким слоем сверху. Размах держим крошечным: подними
+    // его, и вместо рельсы получится мультяшная молния.
+    boltStep: 5,        // длина одного зубчика вдоль луча
+    boltAmp: 2,         // размах зубчика поперёк луча
+
     // Скорость вращения башни, рад/сек. Полный оборот примерно
     // за 3 секунды. Это опорное число всего баланса: скорости
     // танков и дистанция боя подгоняются под него, а не наоборот.
@@ -404,7 +410,14 @@ const CONFIG = {
   // Метка попадания: крестик, который вспыхивает над целью.
   fx: {
     markTime: 0.55,     // сколько живёт метка обычного попадания
-    killTime: 0.9       // метка добивания живёт дольше — событие важнее
+    killTime: 0.9,      // метка добивания живёт дольше — событие важнее
+
+    // Следы попаданий на бетоне. Живут до конца боя, поэтому список
+    // ограничен: без потолка за длинный матч накопятся тысячи пятен,
+    // и каждый кадр будет перерисовывать их все.
+    decalMax: 160,
+
+    critBolt: 1         // сколько секунд по танку бежит молния крита
   },
 
   // Режимы боя. Правила лежат отдельно от физики: танки не знают,
@@ -682,6 +695,11 @@ const hitMarks = []; // метки попаданий: {x,y,life,span,kill}
 const shots = [];
 // Дымки у дула: расходящиеся облачка после выстрела. {x,y,life,span,r}
 const puffs = [];
+// Следы попаданий на бетоне. В отличие от меток попадания эти не гаснут:
+// по ним к концу боя видно, где шла перестрелка. {x,y,blobs}
+const decals = [];
+// Молнии крита: разряд, бегущий по танку. {tank,life,span,jag}
+const crits = [];
 
 /* Ось башни. У Васпа она сдвинута к корме, а не стоит в центре.
    Смещение задано В СИСТЕМЕ КОРПУСА, поэтому крутится вместе с ним:
@@ -756,9 +774,11 @@ function fireRail(shooter, target){
     if (px < 0 || py < 0 || px > CONFIG.world.w || py > CONFIG.world.h){
       endX = px; endY = py; break;
     }
-    // Уткнулись в бетон — луч кончился, урона нет.
+    // Уткнулись в бетон — луч кончился, урона нет, но след остаётся.
     if (OBSTACLES.some(o => pointInRect(px, py, o))){
-      endX = px; endY = py; break;
+      endX = px; endY = py;
+      addDecal(px, py, 'railgun');
+      break;
     }
     // Попали в танк.
     if (target.alive && Math.hypot(px - target.x, py - target.y) < target.radius){
@@ -779,7 +799,11 @@ function fireRail(shooter, target){
     }
   }
 
-  beams.push({ x1:startX, y1:startY, x2:endX, y2:endY, life:CONFIG.rail.beamTime, hit:didHit });
+  beams.push({
+    x1:startX, y1:startY, x2:endX, y2:endY,
+    pts: boltPath(startX, startY, endX, endY),
+    life: CONFIG.rail.beamTime, hit: didHit
+  });
 }
 
 /* Выстрел твинса. Дула работают ПО ОЧЕРЕДИ: стреляет то, чей черёд,
@@ -837,13 +861,19 @@ function shotImpact(b){
   if (b.x < -R || b.y < -R ||
       b.x > CONFIG.world.w + R || b.y > CONFIG.world.h + R) return true;
 
-  if (OBSTACLES.some(o => pointInRect(b.x, b.y, o))) return true;
+  if (OBSTACLES.some(o => pointInRect(b.x, b.y, o))){
+    addDecal(b.x, b.y, b.weapon);
+    return true;
+  }
 
   const t = b.target;
   if (t.alive && Math.hypot(b.x - t.x, b.y - t.y) < t.radius + R){
     const hit = gun.hit(b);           // {damage, aimKick, breakCharge, crit}
     t.takeHit(hit);
     scoreKill(b.owner, t);
+    // Крит без картинки бесполезен: игрок не поймёт, почему из него
+    // вылетело вдвое больше. Пускаем по танку разряд.
+    if (hit.crit) spawnCritBolt(t);
 
     const kill = !t.alive;
     hitMarks.push({
@@ -872,11 +902,73 @@ function updateShots(dt){
     if (spent) shots.splice(i, 1);
   }
 
-  // Дымки просто стареют на месте.
+  // Дымки и молнии просто стареют на месте.
   for (let i = puffs.length - 1; i >= 0; i--){
     puffs[i].life -= dt / puffs[i].span;
     if (puffs[i].life <= 0) puffs.splice(i, 1);
   }
+  for (let i = crits.length - 1; i >= 0; i--){
+    crits[i].life -= dt / crits[i].span;
+    if (crits[i].life <= 0) crits.splice(i, 1);
+  }
+}
+
+/* След попадания на бетоне. Размер задаёт ПУШКА: рельса выжигает
+   заметно, твинс едва царапает. Пятно собираем из трёх кругов со
+   сдвигом — идеальный круг читается как нарисованная точка, а не
+   как след удара.                                                   */
+function addDecal(x, y, weapon){
+  const r = TURRETS[weapon].decal;
+  const blobs = [];
+  for (let i = 0; i < 3; i++)
+    blobs.push({
+      dx: (Math.random() - 0.5) * r,
+      dy: (Math.random() - 0.5) * r,
+      r:  r * (0.55 + Math.random() * 0.45)
+    });
+  decals.push({ x, y, blobs });
+  // Старые вытесняем: список не должен расти без предела.
+  if (decals.length > CONFIG.fx.decalMax) decals.shift();
+}
+
+/* Молния крита. Ломаную строим ОДИН РАЗ и потом просто гоняем её через
+   танк: если пересобирать каждый кадр, разряд превращается в мельтешение
+   и перестаёт читаться как одна молния.                              */
+function spawnCritBolt(tank){
+  const seg = 8, jag = [];
+  for (let i = 0; i <= seg; i++)
+    jag.push({ u: i / seg, v: (Math.random() - 0.5) * 2 });
+  crits.push({ tank, life: 1, span: CONFIG.fx.critBolt, jag });
+}
+
+/* Зубчики поверх луча. Мелкая пила вдоль оси выстрела: шаг и размах
+   слегка гуляют, иначе ровные зубцы читаются как орнамент.
+   Считаем ОДИН РАЗ при выстреле и запоминаем в самом луче — если
+   пересобирать каждый кадр, зубцы дрожат и превращаются в шум.
+   В обоих концах размах сводим к нулю, чтобы пила выходила ровно из
+   дула и упиралась ровно в точку попадания.                         */
+function boltPath(x1, y1, x2, y2){
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return [{ x: x1, y: y1 }, { x: x2, y: y2 }];
+
+  const ux = dx / len, uy = dy / len;        // вдоль луча
+  const nx = -uy,      ny = ux;              // поперёк луча
+
+  const cfg = CONFIG.rail;
+  const pts = [{ x: x1, y: y1 }];
+  let d = 0, side = 1;
+
+  while (d < len){
+    d = Math.min(len, d + cfg.boltStep * (0.7 + Math.random() * 0.6));
+    const amp = d >= len ? 0 : cfg.boltAmp * (0.45 + Math.random() * 1.1);
+    pts.push({
+      x: x1 + ux * d + nx * side * amp,
+      y: y1 + uy * d + ny * side * amp
+    });
+    side = -side;
+  }
+  return pts;
 }
 
 /* Есть ли чистая линия от точки до танка — нужно боту, чтобы
@@ -1163,6 +1255,7 @@ function drawObstacles(){
      hudReload   по чему рисовать шкалу перезарядки (нет — шкалы нет)
      lateral()   откуда сейчас смотрит прицел (у твинса — из активного дула)
      laser()     цвет нити прицела
+     decal       радиус следа, который выстрел оставляет на бетоне
      shotRadius  радиус попадания снаряда (только у пушек со снарядом)
      hit()       что делает попадание: {damage, aimKick, breakCharge, crit}
      drawShot()  как выглядит снаряд в полёте
@@ -1171,6 +1264,7 @@ const TURRETS = {
   railgun: {
     name: 'Рельса',
     charges: true,
+    decal: 7,                                 // прожигает бетон заметнее всех
     hudReload: CONFIG.rail.reload,
     lateral: () => 0,                         // ствол один, он же ось
     laser: t => `rgba(167,90,247,${0.3 + t.charge * 0.5})`,
@@ -1266,6 +1360,7 @@ const TURRETS = {
     // hudReload нет: у твинса нет перезарядки, значит нечего и показывать.
     // Пауза между выстрелами живёт в том же cooldown, но она часть очереди,
     // а не «оружие занято» — шкала врала бы про суть пушки.
+    decal: 3.2,                               // плазменный шарик едва царапает
     lateral: t => t.barrelSide * CONFIG.twins.spread,
     laser: () => `rgba(${CONFIG.twins.glow},.4)`,
     shotRadius: CONFIG.twins.radius,
@@ -1387,6 +1482,7 @@ const TURRETS = {
     name: 'Смоки',
     barrel: CONFIG.smoky.barrel,
     hudReload: CONFIG.smoky.reload,     // перезарядка есть — шкала нужна
+    decal: 5,                           // болванка выбивает выщербину
     lateral: () => 0,                   // ствол один, он же ось
     laser: () => `rgba(${CONFIG.smoky.flame},.42)`,
     shotRadius: CONFIG.smoky.radius,
@@ -1697,6 +1793,62 @@ function drawTank(t, isPlayer, preview = false){
   }
 }
 
+/* Следы попаданий на бетоне. Рисуются ПОД танками и флагами: это
+   поверхность арены, а не то, что летает над ней.                   */
+function drawDecals(){
+  ctx.fillStyle = 'rgba(35,34,30,.28)';
+  for (const d of decals)
+    for (const b of d.blobs){
+      ctx.beginPath();
+      ctx.arc(d.x + b.dx, d.y + b.dy, b.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+}
+
+/* Молния крита. Разряд ИДЁТ ЧЕРЕЗ машину: точка пересечения едет от
+   носа к корме за всё время жизни — потому и «пробежала», а не
+   «повисела». Рисуем в системе КОРПУСА, чтобы разряд ехал вдоль танка,
+   даже если тот развернулся посреди эффекта.                        */
+function drawCritBolts(){
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  for (const c of crits){
+    const t = c.tank;
+    const a = c.life;
+    const hl = t.hull.len / 2, hw = t.hull.wid / 2;
+    const px = hl - (1 - a) * hl * 2;         // нос → корма
+
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.rotate(t.bodyAngle);
+
+    // Ломаная поперёк корпуса, чуть выходящая за борта.
+    const path = () => {
+      ctx.beginPath();
+      c.jag.forEach((j, i) => {
+        const y = -hw - 5 + j.u * (hw * 2 + 10);
+        const x = px + j.v * 4;
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      });
+    };
+
+    // Три слоя: широкий ореол, жёлтое тело, белое ядро. Один слой
+    // читался бы как жёлтая палка, а не как разряд.
+    ctx.strokeStyle = `rgba(255,196,52,${a * 0.30})`;
+    ctx.lineWidth = 9;  path(); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,214,74,${a * 0.85})`;
+    ctx.lineWidth = 3.5; path(); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,250,214,${a})`;
+    ctx.lineWidth = 1.4; path(); ctx.stroke();
+
+    ctx.restore();
+  }
+
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'miter';
+}
+
 /* Снаряды в полёте и дымки у дул. Как выглядит снаряд, знает пушка —
    здесь только порядок слоёв: дым под снарядами, иначе свежее облачко
    накрывает собственную болванку.                                    */
@@ -1726,24 +1878,42 @@ function drawShots(){
    Если бы просто гасили прозрачность, выглядело бы как выключенная
    лампочка, а не как рассеивающийся плазменный след.               */
 function drawBeams(){
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
   for (const b of beams){
     const a = b.life / CONFIG.rail.beamTime;   // 1 в момент выстрела → 0 в конце
     const spread = 1 - a;                      // насколько след уже расплылся
 
+    // Сам луч — ПРЯМАЯ линия, как и был, только тоньше.
+    const line = () => {
+      ctx.beginPath();
+      ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2);
+    };
+
     // Внешний ореол: расширяется и почти сразу бледнеет.
-    ctx.strokeStyle = `rgba(124,58,237,${a * a * 0.3})`;
-    ctx.lineWidth = 6 + spread * 22;
-    ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
+    ctx.strokeStyle = `rgba(124,58,237,${a * a * 0.28})`;
+    ctx.lineWidth = 4 + spread * 14;
+    line(); ctx.stroke();
 
     // Средний слой — насыщенный фиолет, держится дольше ореола.
     ctx.strokeStyle = `rgba(167,90,247,${a * 0.55})`;
-    ctx.lineWidth = 3 + spread * 7;
-    ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
+    ctx.lineWidth = 2 + spread * 4;
+    line(); ctx.stroke();
 
     // Ядро: тонкая почти белая нить, гаснет резко (a в кубе).
     ctx.strokeStyle = `rgba(243,232,255,${a * a * a})`;
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
+    ctx.lineWidth = 1.2;
+    line(); ctx.stroke();
+
+    // Зубчики ПОВЕРХ прямой линии. Отдельный тонкий слой: он не заменяет
+    // луч, а сидит на нём — отсюда и ощущение живого разряда, а не
+    // нарисованной черты.
+    ctx.strokeStyle = `rgba(226,208,255,${a * a * 0.85})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    b.pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+    ctx.stroke();
 
     // Вспышка в точке попадания — расходящееся кольцо.
     if (b.hit){
@@ -1755,6 +1925,9 @@ function drawBeams(){
       ctx.beginPath(); ctx.arc(b.x2, b.y2, 10 * a, 0, Math.PI * 2); ctx.fill();
     }
   }
+
+  ctx.lineJoin = 'miter';                      // общее состояние ctx — как было
+  ctx.lineCap = 'butt';
 }
 
 /* Базы и флаги. Рисуются только в CTF.                            */
@@ -1836,10 +2009,12 @@ function drawHitMarks(){
     const len = 6 - grow * 2;            // сам штрих чуть укорачивается
 
     // Добивание отмечаем янтарным и толще — это событие крупнее.
-    ctx.strokeStyle = m.kill
-      ? `rgba(232,197,71,${a})`
-      : `rgba(243,232,255,${a})`;
-    ctx.lineWidth = (m.kill ? 3 : 2.2) * (0.4 + a * 0.6);
+    // Крит — оранжевым: невидимый крит бесполезен, по нему и понимаешь,
+    // почему из противника вдруг вылетело вдвое больше здоровья.
+    ctx.strokeStyle = m.kill ? `rgba(232,197,71,${a})`
+                    : m.crit ? `rgba(255,164,58,${a})`
+                             : `rgba(243,232,255,${a})`;
+    ctx.lineWidth = (m.kill || m.crit ? 3 : 2.2) * (0.4 + a * 0.6);
     ctx.lineCap = 'round';
 
     // Четыре штриха по диагоналям. Цикл по двум знакам вместо
@@ -1900,6 +2075,8 @@ function newMatch(){
   hitMarks.length = 0;
   shots.length = 0;
   puffs.length = 0;
+  decals.length = 0;
+  crits.length = 0;
   resetFlags();
   scorePEl.textContent = scoreBEl.textContent = '0';
   // Шапка показывает выбранный корпус игрока.
@@ -1962,11 +2139,13 @@ function tick(now){
   // --- 6. Рисуем кадр ---
   drawFloor();
   drawObstacles();
+  drawDecals();          // следы на бетоне — часть поверхности, под всем
   drawCTF();             // базы и флаги под танками
   drawBeams();
   drawTank(bot, false);
   drawTank(player, true);
   drawShots();           // снаряды над танками — по ним читается бой
+  drawCritBolts();       // разряд крита поверх танка, который его поймал
   drawHitMarks();        // метки поверх всего — их нельзя пропустить
 
   // --- 7. Счёт и конец матча ---
