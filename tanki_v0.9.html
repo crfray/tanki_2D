@@ -266,7 +266,8 @@ const CONFIG = {
 
   ctf: {
     pickup: 26,         // с какого расстояния подбирается флаг
-    returnTime: 12,     // через сколько брошенный флаг сам вернётся домой
+    returnTime: 20,     // через сколько брошенный флаг сам вернётся домой
+                        // (с запасом: карты будут крупнее, дольше ехать)
     baseR: 26           // радиус базы — в нём засчитывается захват
   },
 
@@ -576,7 +577,10 @@ function fireRail(shooter, target){
     if (target.alive && Math.hypot(px - target.x, py - target.y) < target.radius){
       endX = px; endY = py; didHit = true;
       target.takeHit();
-      if (!target.alive) shooter.score += 1;
+      // Счёт за фраг идёт ТОЛЬКО в Death Match. В CTF победу приносят
+      // захваты флага (updateCTF), а убийство — лишь способ сбить
+      // носильщика; само по себе оно к победе не приближает.
+      if (!target.alive && GAME.mode === 'dm') shooter.score += 1;
 
       // Метка попадания. Ставим её в ТОЧКУ ЛУЧА, а не в центр танка:
       // так видно, куда именно пришёлся выстрел, — по носу зацепил
@@ -1146,6 +1150,20 @@ function drawCTF(){
     const f = flags[side];
     const color = side === 'player' ? '#3d6e8c' : '#b04a33';
 
+    const carried = f.state === 'carried';
+
+    // Носильщика обводим пульсирующим кольцом В ЦВЕТЕ ФЛАГА. Сразу
+    // читается и КАКОЙ танк тащит флаг, и ЧЕЙ это флаг: цвет кольца —
+    // цвет владельца, то есть противника носильщика.
+    if (carried){
+      const pulse = 0.5 + 0.5 * Math.abs(Math.sin(performance.now() / 260));
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 0.45 + 0.4 * pulse;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(f.x, f.y, 22 + pulse * 3, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
     // Брошенный флаг мигает тем чаще, чем меньше времени до возврата.
     // Не таймер цифрами — а то, что видно, не отрывая взгляда от боя.
     let alpha = 1;
@@ -1154,17 +1172,23 @@ function drawCTF(){
       alpha = 0.45 + 0.55 * Math.abs(Math.sin(performance.now() / (400 - urgency * 280)));
     }
 
+    // Когда флаг НЕСУТ, поднимаем его выше корпуса, чтобы древко не
+    // сливалось с башней носильщика. poleBase/poleTop — не 'bot',
+    // иначе затеним глобальный танк bot.
+    const poleTop  = f.y - 16 - (carried ? 14 : 0);
+    const poleBase = f.y + 6  - (carried ? 14 : 0);
+
     ctx.globalAlpha = alpha;
     // Древко.
     ctx.strokeStyle = '#23221e';
     ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(f.x, f.y + 6); ctx.lineTo(f.x, f.y - 16); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(f.x, poleBase); ctx.lineTo(f.x, poleTop); ctx.stroke();
     // Полотнище.
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.moveTo(f.x + 1, f.y - 16);
-    ctx.lineTo(f.x + 15, f.y - 11);
-    ctx.lineTo(f.x + 1, f.y - 6);
+    ctx.moveTo(f.x + 1,  poleTop);
+    ctx.lineTo(f.x + 15, poleTop + 5);
+    ctx.lineTo(f.x + 1,  poleTop + 10);
     ctx.closePath(); ctx.fill();
     ctx.strokeStyle = '#23221e'; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.globalAlpha = 1;
