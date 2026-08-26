@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ХР/ВР — рельса, 2 патрона до смерти</title>
+<style>
+  /* ============================================================
+     ОФОРМЛЕНИЕ. Тут нет игровой логики, только внешний вид.
+     Палитра взята из мира игры: песчаная карта, бетонные блоки,
+     стальной корпус против ржавого, и янтарный цвет приборов.
+     ============================================================ */
+  :root{
+    --sand:      #c9b896;  /* пол арены */
+    --sand-dark: #b5a37f;  /* полосы на полу */
+    --concrete:  #8a8272;  /* блоки-укрытия */
+    --ink:       #23221e;  /* контуры и фон страницы */
+    --steel:     #3d6e8c;  /* Хорнет — игрок */
+    --rust:      #b04a33;  /* Васп — бот */
+    --amber:     #e8c547;  /* приборы, акцент */
+    --hot:       #fff3d6;  /* луч рельсы */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--ink);
+    color:var(--sand);
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    display:flex;align-items:center;justify-content:center;
+    padding:16px;
+  }
+  #wrap{width:100%;max-width:900px}
+
+  /* Шапка со счётом. Сделана как приборная панель: подписи мелкие
+     и разряженные, цифры крупные — глаз ищет цифру, а не слово. */
+  header{
+    display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 4px 10px;
+  }
+  .side{display:flex;flex-direction:column;gap:2px}
+  .side.right{align-items:flex-end}
+  .label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;opacity:.65}
+  .score{font-size:34px;line-height:1;font-weight:700}
+  .steel{color:var(--steel);filter:brightness(1.5)}
+  .rust{color:var(--rust);filter:brightness(1.3)}
+  .goal{font-size:10px;letter-spacing:.22em;opacity:.5;text-align:center;padding-bottom:6px}
+
+  /* Сцена. position:relative нужен, чтобы наложить меню поверх канваса. */
+  #stage{position:relative;border:2px solid #3a382f;background:var(--sand)}
+  canvas{display:block;width:100%;height:auto}
+
+  /* Экран меню / победы. */
+  #overlay{
+    position:absolute;inset:0;
+    background:rgba(35,34,30,.86);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    text-align:center;padding:24px;
+  }
+  #overlay.hidden{display:none}
+  #title{font-size:26px;letter-spacing:.1em;color:var(--amber);margin:0}
+  #subtitle{font-size:12px;line-height:1.9;opacity:.8;max-width:420px;margin:0}
+  kbd{
+    background:#3a382f;border:1px solid #57544a;border-radius:3px;
+    padding:1px 6px;font:inherit;font-size:11px;color:var(--sand)
+  }
+  button{
+    font:inherit;font-size:13px;letter-spacing:.16em;text-transform:uppercase;
+    background:var(--amber);color:var(--ink);border:0;border-radius:2px;
+    padding:12px 28px;cursor:pointer;
+  }
+  button:hover{filter:brightness(1.1)}
+  button:focus-visible{outline:2px solid var(--sand);outline-offset:3px}
+
+  /* Переключатель режимов. Выбранный залит янтарным, остальные —
+     контурные: активное состояние читается формой, а не только цветом. */
+  #modes{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  .mode{
+    background:transparent;color:var(--sand);
+    border:1px solid #57544a;padding:9px 18px;font-size:11px;
+  }
+  .mode.is-on{background:var(--amber);color:var(--ink);border-color:var(--amber)}
+  .mode:hover{filter:none;border-color:var(--sand)}
+
+  #targetRow{
+    font-size:12px;letter-spacing:.1em;opacity:.85;
+    display:flex;align-items:center;gap:8px;
+  }
+  #targetInput{
+    font:inherit;font-size:15px;width:62px;text-align:center;
+    background:#3a382f;color:var(--amber);
+    border:1px solid #57544a;border-radius:2px;padding:6px 4px;
+  }
+  #targetInput:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+
+  footer{font-size:10px;letter-spacing:.14em;opacity:.45;padding-top:10px;text-align:center}
+</style>
+</head>
+<body>
+<div id="wrap">
+
+  <header>
+    <div class="side">
+      <span class="label">Хорнет · ты</span>
+      <span class="score steel" id="scoreP">0</span>
+    </div>
+    <div class="goal">до 5 побед</div>
+    <div class="side right">
+      <span class="label">Васп · бот</span>
+      <span class="score rust" id="scoreB">0</span>
+    </div>
+  </header>
+
+  <div id="stage">
+    <canvas id="cv" width="900" height="600"></canvas>
+    <div id="overlay">
+      <h1 id="title">ХР / ВР</h1>
+
+      <div id="modes">
+        <button class="mode is-on" data-mode="dm">Death Match</button>
+        <button class="mode" data-mode="ctf">Capture the Flag</button>
+      </div>
+
+      <label id="targetRow">
+        до <input id="targetInput" type="number" min="1" max="99" value="5">
+        <span id="targetWord">убийств</span>
+      </label>
+
+      <p id="subtitle">
+        <kbd>↑</kbd> <kbd>↓</kbd> — вперёд и назад &nbsp;·&nbsp; <kbd>←</kbd> <kbd>→</kbd> — поворот корпуса<br>
+        <kbd>Z</kbd> <kbd>X</kbd> — башня влево и вправо &nbsp;·&nbsp; <kbd>Пробел</kbd> — держать для выстрела<br><br>
+        Рельса копит энергию около секунды и бьёт сама. Два попадания — смерть.<br>
+        Попадание сбивает противнику прицел и срывает накопленный заряд.
+      </p>
+      <button id="startBtn">В бой</button>
+    </div>
+  </div>
+
+  <footer id="ver">прототип</footer>
+</div>
+
+<script>
+/* ==================================================================
+   ХР/ВР — ТАНКИ С РЕЛЬСОЙ
+   ==================================================================
+   ВЕРСИЯ 0.9                                    26 августа 2026
+
+   Номер версии живёт прямо в файле и показан в углу экрана.
+   Скачал файл — через месяц сразу видно, что это за сборка.
+   Правило: меняешь игру — поднимаешь номер и дописываешь строку
+   в историю ниже. Дописывать в НАЧАЛО списка, свежее сверху.
+
+   ИСТОРИЯ ИЗМЕНЕНИЙ
+   -----------------
+   0.9  Два режима боя на выбор: Death Match и Capture the Flag.
+        Условие победы задаётся числом в меню перед стартом.
+        В CTF появились базы, флаги, подбор и возврат; бот в этом
+        режиме едет за флагом, а не кружит вокруг игрока.
+   0.8  Попадание теперь видно: в точке удара вспыхивает крестик
+        и разлетается вверх. Добивание отмечается янтарным крестиком
+        с расходящимся кольцом.
+   0.7  Башня теперь стоит НА КОРПУСЕ: разворот машины разворачивает
+        и ствол. Раньше башня была прибита к миру и корпус крутился
+        под ней отдельно. Появился приём — корпусом наводишься грубо,
+        клавишами Z/X доводишь точно.
+   0.6  Васп сведён к ширине Хорнета: силуэт держится на вырезе
+        кормы и сдвинутой башне, а не на габаритах.
+        Ствол рельсы похудел с 9 до 4 пикселей. Текстура теперь
+        идёт ВДОЛЬ ствола (две направляющие + рёбра), а не поперёк.
+        Заряд бежит по направляющим от казны к дулу.
+   0.5  Форма корпуса вынесена в список точек — правится одной
+        строкой. Васп получил вырез на корме. Стволы уравнены.
+   0.4  Баланс: башня стала проворнее корпуса (2.1 против 1.4).
+        Замедление при накоплении заряда.
+        Починен баг: разброс прицела бота брался каждый кадр и
+        потому самоуничтожался — бот бил идеально точно.
+   0.3  Рельса стала двухтактной: накопление у дула, затем выстрел.
+        Фиолетовый луч с испаряющимся следом. Вытянутые корпуса.
+   0.2  Управление переведено на клавиатуру: стрелки + Z/X.
+   0.1  Первая играбельная сборка: два танка, рельса, бот, счёт.
+
+   ЧТО ДАЛЬШЕ
+   ----------
+   - Локальный мультиплеер на одной клавиатуре
+   - Сетевая игра (бот заменяется командами от второго игрока —
+     формат команд для этого уже подготовлен, см. botThink)
+   ================================================================== */
+const VERSION = '0.9';
+/* ==================================================================
+   ЧАСТЬ 1. НАСТРОЙКИ
+   ------------------------------------------------------------------
+   Все числа игры собраны в одном месте. Это главное правило удобного
+   кода: если захочешь сделать Васп быстрее или рельсу злее — правишь
+   здесь, а не ищешь цифру по всему файлу.
+   Скорости заданы «в секунду», а не «за кадр», — тогда игра идёт
+   одинаково и на 60 Гц, и на 144 Гц мониторе.
+   ================================================================== */
+const CONFIG = {
+  world: { w: 900, h: 600 },          // размер арены в пикселях
+
+  // Два корпуса. Оба «стеклянные», разница в характере.
+  // len/wid   — длина и ширина корпуса в пикселях.
+  // shape     — 'boxy' простой прямоугольник (Хорнет),
+  //             'notched' прямоугольник с вырезом на корме (Васп).
+  // turretBack— насколько башня сдвинута НАЗАД от центра корпуса.
+  //             У Васпа она сидит ближе к корме, поэтому ствол
+  //             уходит дальше вперёд и силуэт получается угловатым.
+  // barrel    — длина ствола от оси башни. У обоих ОДИНАКОВАЯ:
+  //             это оружие одного класса, разной должна быть машина.
+  // radius    — размер хитбокса (круг). Он намеренно чуть меньше
+  //             корпуса: попадание по краешку брони ощущается нечестно.
+  //
+  // ВАЖНО ПРО БАЛАНС: turn (поворот корпуса) намеренно МЕДЛЕННЕЕ,
+  // чем поворот башни ниже. Иначе противник, кружащий вокруг тебя,
+  // просто убегает от твоего ствола и попасть невозможно.
+  // Правило простое: башня должна быть проворнее корпуса.
+  hulls: {
+    hornet: { speed: 112, turn: 1.4, radius: 17, len: 50, wid: 26,
+              shape: 'boxy',    turretBack: 0, barrel: 46,
+              color: '#3d6e8c', name: 'Хорнет' },
+    // Васп такой же тонкий, как Хорнет. Разница не в габаритах,
+    // а в силуэте: вырез на корме, короче на четыре пикселя,
+    // башня сдвинута назад. Габариты трогать нельзя — иначе
+    // ломается баланс, ведь широкий танк просто крупнее как мишень.
+    wasp:   { speed: 124, turn: 1.6, radius: 16, len: 46, wid: 26,
+              shape: 'notched', turretBack: 9, barrel: 46,
+              color: '#b04a33', name: 'Васп'   }
+  },
+
+  rail: {
+    charge: 1.05,       // сколько держать огонь, пока копится энергия
+    reload: 1.5,        // секунд между выстрелами
+    range: 1400,        // дальность луча
+    beamTime: 0.55,     // сколько секунд след испаряется после выстрела
+
+    // Скорость вращения башни, рад/сек. Полный оборот примерно
+    // за 3 секунды. Это опорное число всего баланса: скорости
+    // танков и дистанция боя подгоняются под него, а не наоборот.
+    turretTurn: 2.1,
+
+    // Пока копится заряд, танк вязнет: и едет, и крутит башню хуже.
+    // Это плата за выстрел — и она же даёт контригру. Видишь, что
+    // противник заряжается, значит он сейчас медленный.
+    chargeSlowMove: 0.45,
+    chargeSlowTurret: 0.6,
+
+    aimKick: 0.55       // насколько сильно сбивает прицел при попадании (рад)
+  },
+
+  hp: 2,                // сколько попаданий держит танк
+  respawn: 1.6,         // пауза перед возрождением, секунд
+  winScore: 5,
+
+  // Метка попадания: крестик, который вспыхивает над целью.
+  fx: {
+    markTime: 0.55,     // сколько живёт метка обычного попадания
+    killTime: 0.9       // метка добивания живёт дольше — событие важнее
+  },
+
+  // Режимы боя. Правила лежат отдельно от физики: танки не знают,
+  // за что идёт бой, они просто ездят и стреляют. Добавить третий
+  // режим потом — значит дописать сюда строку, а не трогать физику.
+  modes: {
+    dm:  { name: 'Death Match',     word: 'убийств', defTarget: 5 },
+    ctf: { name: 'Capture the Flag', word: 'флагов', defTarget: 3 }
+  },
+
+  ctf: {
+    pickup: 26,         // с какого расстояния подбирается флаг
+    returnTime: 12,     // через сколько брошенный флаг сам вернётся домой
+    baseR: 26           // радиус базы — в нём засчитывается захват
+  },
+
+  // Бот ослаблен по пяти осям сразу. Одна большая поблажка
+  // читается как тупость, пять мелких — как живой противник,
+  // который иногда мажет и иногда медлит.
+  bot: {
+    reaction: 0.40,     // задержка реакции: видит игрока с опозданием
+    aimError: 0.10,     // разброс прицела, рад — берётся раз на такт
+    turretTurn: 1.35,   // башня крутится заметно медленнее твоей
+    keepDist: 340,      // дистанцию держит снайперскую
+    strafe: 2.4,        // как часто меняет направление обхода, секунд
+    pause: 0.9          // сколько медлит после выстрела, прежде чем копить снова
+  }
+};
+
+/* Базы. Здесь стоят флаги и здесь засчитывается захват.
+   Ставим их у точек возрождения — так своя половина карты
+   ощущается своей.                                                 */
+const BASES = {
+  player: { x: 70,  y: 530 },
+  bot:    { x: 830, y: 70  }
+};
+/* Блоки-укрытия. Карта симметричная: что есть у одного, есть и у другого. */
+const OBSTACLES = [
+  { x: 150, y: 110, w: 130, h: 38 },
+  { x: 620, y: 452, w: 130, h: 38 },
+  { x: 395, y:  70, w:  38, h: 150 },
+  { x: 467, y: 380, w:  38, h: 150 },
+  { x: 110, y: 370, w:  58, h: 130 },
+  { x: 732, y: 100, w:  58, h: 130 },
+  { x: 415, y: 270, w:  70, h: 60  }
+];
+
+/* ==================================================================
+   ЧАСТЬ 2. МЕЛКАЯ МАТЕМАТИКА
+   ------------------------------------------------------------------
+   Ниже — функции, которые понадобятся везде. Разбери их один раз,
+   дальше код читается легко.
+   ================================================================== */
+
+// Загоняет число в диапазон: clamp(15, 0, 10) вернёт 10.
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+// Приводит любой угол к отрезку от -PI до +PI.
+// Нужно, чтобы башня доворачивала коротким путём, а не делала круг.
+function wrapAngle(a){
+  while (a >  Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
+// Плавно поворачивает угол `from` к углу `to`, но не быстрее, чем maxStep.
+function turnToward(from, to, maxStep){
+  const diff = wrapAngle(to - from);
+  return from + clamp(diff, -maxStep, maxStep);
+}
+
+// Лежит ли точка внутри прямоугольника.
+const pointInRect = (px, py, r) =>
+  px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+
+/* ==================================================================
+   ЧАСТЬ 3. ТАНК
+   ------------------------------------------------------------------
+   Класс описывает один танк. Важная деталь, из-за которой игра
+   ощущается «той самой»: КОРПУС и БАШНЯ вращаются НЕЗАВИСИМО.
+   Корпус — клавишами, башня — мышью. Поэтому можно ехать в одну
+   сторону, а стрелять в другую.
+   ================================================================== */
+class Tank {
+  constructor(hullKey, x, y, angle){
+    this.hull = CONFIG.hulls[hullKey];
+
+    this.spawnX = x;                 // куда возрождаться
+    this.spawnY = y;
+    this.spawnAngle = angle;
+
+    this.x = x;
+    this.y = y;
+    this.bodyAngle = angle;          // куда смотрит корпус
+    this.turretAngle = angle;        // куда смотрит рельса
+
+    this.hp = CONFIG.hp;
+    this.cooldown = 0;               // сколько секунд до следующего выстрела
+    this.charge = 0;                 // накопленная энергия рельсы, 0..1
+    this.turretSpeed = CONFIG.rail.turretTurn;  // у бота будет своя, медленнее
+    this.deadTimer = 0;              // >0 значит танк уничтожен и ждёт респавна
+
+    // Сбитый прицел. При попадании сюда кладётся отдача,
+    // и она сама затухает со временем в update().
+    this.aimKick = 0;
+
+    this.score = 0;
+  }
+
+  get alive(){ return this.deadTimer <= 0; }
+  get radius(){ return this.hull.radius; }
+
+  /* Куда РЕАЛЬНО смотрит ствол.
+     turretAngle — то, куда танкист крутит башню.
+     aimKick — отдача от попадания, которая уводит ствол в сторону.
+     Стреляем и рисуем всегда по этой сумме, а не по turretAngle. */
+  get aimAngle(){ return this.turretAngle + this.aimKick; }
+
+  /* Один шаг физики.
+     drive:       -1 назад, 0 стоим, +1 вперёд
+     rotate:      -1 влево, 0 прямо, +1 вправо  (корпус)
+     turretCmd:   как крутить башню. Два режима:
+                  { rotate: -1|0|1 } — вручную, клавишами (игрок)
+                  { toward: угол }   — доворачивать к цели (бот)
+     dt:          сколько секунд прошло с прошлого кадра               */
+  update(dt, drive, rotate, turretCmd){
+    // Мёртвый танк только отсчитывает время до возрождения.
+    if (!this.alive){
+      this.deadTimer -= dt;
+      if (this.deadTimer <= 0) this.respawn();
+      return;
+    }
+
+    this.cooldown = Math.max(0, this.cooldown - dt);
+
+    // Отдача по прицелу гаснет — примерно за полсекунды.
+    this.aimKick *= Math.pow(0.02, dt);
+
+    // --- Штраф за накопление ---
+    // Пока копится заряд, танк вязнет. Множитель плавно едет
+    // от 1 (заряда нет) до chargeSlow* (заряд полный) — именно
+    // поэтому используем charge как долю, а не как флаг «копит/не копит».
+    const slowMove   = 1 - (1 - CONFIG.rail.chargeSlowMove)   * this.charge;
+    const slowTurret = 1 - (1 - CONFIG.rail.chargeSlowTurret) * this.charge;
+
+    // --- Поворот корпуса вокруг своей оси ---
+    // Запоминаем, НА СКОЛЬКО повернулся корпус за этот кадр.
+    // Дальше этот же угол добавится башне.
+    const bodyDelta = rotate * this.hull.turn * slowMove * dt;
+    this.bodyAngle += bodyDelta;
+
+    // --- Движение по XY в ту сторону, куда смотрит корпус ---
+    // cos даёт составляющую по X, sin — по Y. Это перевод
+    // «угол + скорость» в «сдвиг по осям».
+    const step = drive * this.hull.speed * slowMove * dt;
+    this.x += Math.cos(this.bodyAngle) * step;
+    this.y += Math.sin(this.bodyAngle) * step;
+
+    // --- Башня ---
+    // Она СТОИТ НА КОРПУСЕ, а не висит в воздухе. Поэтому первым
+    // делом башня разворачивается вместе с машиной: развернул танк
+    // на 360 — ствол описал ровный круг и вернулся куда смотрел
+    // относительно корпуса.
+    //
+    // Раньше этой строки не было, и башня была как бы прибита
+    // к миру: корпус крутился под ней отдельно. Выглядело неправильно
+    // и играть было неудобно.
+    this.turretAngle += bodyDelta;
+
+    // Поверх этого — собственный доворот башни относительно корпуса.
+    // Отсюда и приём: корпусом наводишься грубо и быстро,
+    // клавишами Z/X доводишь точно.
+    const tSpeed = this.turretSpeed * slowTurret * dt;
+    if (turretCmd.rotate !== undefined){
+      // Ручной режим: клавиша крутит башню с постоянной скоростью.
+      this.turretAngle += turretCmd.rotate * tSpeed;
+    } else {
+      // Автонаведение бота: доворачиваем к цели, но не быстрее лимита.
+      this.turretAngle = turnToward(this.turretAngle, turretCmd.toward, tSpeed);
+    }
+
+    this.resolveCollisions();
+  }
+
+  // Не даём выехать за карту и въехать в бетон.
+  resolveCollisions(){
+    const r = this.radius;
+    this.x = clamp(this.x, r, CONFIG.world.w - r);
+    this.y = clamp(this.y, r, CONFIG.world.h - r);
+
+    for (const o of OBSTACLES){
+      // Ближайшая к центру танка точка прямоугольника.
+      const nx = clamp(this.x, o.x, o.x + o.w);
+      const ny = clamp(this.y, o.y, o.y + o.h);
+      let dx = this.x - nx, dy = this.y - ny;
+      let dist = Math.hypot(dx, dy);
+
+      if (dist >= r) continue;       // не пересекаемся — идём дальше
+
+      if (dist === 0){               // редкий случай: центр ровно на грани
+        dx = 1; dy = 0; dist = 1;
+      }
+      // Выталкиваем танк наружу по кратчайшему направлению.
+      const push = (r - dist) / dist;
+      this.x += dx * push;
+      this.y += dy * push;
+    }
+  }
+
+  takeHit(){
+    this.hp -= 1;
+    // Вот оно — «сбитый прицел». Толчок в случайную сторону:
+    // после попадания противник секунду не может нормально целиться.
+    this.aimKick += (Math.random() < 0.5 ? -1 : 1) * CONFIG.rail.aimKick;
+    // Накопленная энергия срывается. Попал первым — сбил чужой выстрел.
+    this.charge = 0;
+    if (this.hp <= 0) this.deadTimer = CONFIG.respawn;
+  }
+
+  respawn(){
+    this.x = this.spawnX;
+    this.y = this.spawnY;
+    this.bodyAngle = this.turretAngle = this.spawnAngle;
+    this.hp = CONFIG.hp;
+    this.cooldown = 0;
+    this.charge = 0;
+    this.aimKick = 0;
+    this.deadTimer = 0;
+  }
+}
+
+/* ==================================================================
+   ЧАСТЬ 4. РЕЛЬСА
+   ------------------------------------------------------------------
+   Работает в два такта, как настоящая рельса:
+
+   1. НАКОПЛЕНИЕ. Пока держишь огонь, у дула копится энергия.
+      Это видно — сгусток растёт и разгорается. Уязвимое время:
+      ты стоишь на прицеле и светишься.
+   2. ВЫСВОБОЖДЕНИЕ. Заряд полон — луч уходит мгновенно.
+      Снаряда нет, попадание считается сразу: это называется hitscan.
+      Мы просто идём по прямой мелкими шагами от дула и смотрим,
+      во что упрёмся первым — в бетон или в танк.
+
+   Отпустил огонь раньше времени — заряд стекает обратно.
+   Получил попадание — заряд срывается полностью.
+   ================================================================== */
+const beams = [];   // испаряющиеся следы выстрелов: {x1,y1,x2,y2,life,hit}
+const hitMarks = []; // метки попаданий: {x,y,life,span,kill}
+
+/* Ось башни. У Васпа она сдвинута к корме, а не стоит в центре.
+   Смещение задано В СИСТЕМЕ КОРПУСА, поэтому крутится вместе с ним:
+   развернул танк — ось поехала по дуге, и дуло качнулось. Мелочь,
+   но именно из-за неё разворот корпуса ощущается тяжёлым.          */
+function turretPivot(t){
+  const back = t.hull.turretBack;
+  return {
+    x: t.x - Math.cos(t.bodyAngle) * back,
+    y: t.y - Math.sin(t.bodyAngle) * back
+  };
+}
+
+/* Кончик ствола. Отсюда растёт сгусток и отсюда уходит луч —
+   поэтому координата считается одной функцией, а не двумя разными. */
+function muzzle(t){
+  const p = turretPivot(t);
+  return {
+    x: p.x + Math.cos(t.aimAngle) * t.hull.barrel,
+    y: p.y + Math.sin(t.aimAngle) * t.hull.barrel
+  };
+}
+
+/* Один шаг работы орудия.
+   wantsFire — держит ли танкист кнопку огня прямо сейчас.          */
+function updateWeapon(shooter, target, wantsFire, dt){
+  if (!shooter.alive){ shooter.charge = 0; return; }
+
+  if (wantsFire && shooter.cooldown <= 0){
+    // Копим. Делим на время зарядки, чтобы charge шёл ровно от 0 до 1.
+    shooter.charge += dt / CONFIG.rail.charge;
+    if (shooter.charge >= 1){
+      shooter.charge = 0;
+      fireRail(shooter, target);
+    }
+  } else {
+    // Отпустил — энергия стекает. Втрое быстрее, чем копилась:
+    // передумать дёшево, но не бесплатно.
+    shooter.charge = Math.max(0, shooter.charge - dt / CONFIG.rail.charge * 3);
+  }
+}
+
+function fireRail(shooter, target){
+  shooter.cooldown = CONFIG.rail.reload;
+
+  const dirX = Math.cos(shooter.aimAngle);
+  const dirY = Math.sin(shooter.aimAngle);
+
+  const m = muzzle(shooter);
+  const startX = m.x, startY = m.y;
+
+  let endX = startX + dirX * CONFIG.rail.range;
+  let endY = startY + dirY * CONFIG.rail.range;
+  let didHit = false;
+
+  // Шаг 3 пикселя. Меньше — точнее, но медленнее. Для 2D этого хватает.
+  const STEP = 3;
+  for (let d = 0; d < CONFIG.rail.range; d += STEP){
+    const px = startX + dirX * d;
+    const py = startY + dirY * d;
+
+    // Вылетели за карту — луч кончился.
+    if (px < 0 || py < 0 || px > CONFIG.world.w || py > CONFIG.world.h){
+      endX = px; endY = py; break;
+    }
+    // Уткнулись в бетон — луч кончился, урона нет.
+    if (OBSTACLES.some(o => pointInRect(px, py, o))){
+      endX = px; endY = py; break;
+    }
+    // Попали в танк.
+    if (target.alive && Math.hypot(px - target.x, py - target.y) < target.radius){
+      endX = px; endY = py; didHit = true;
+      target.takeHit();
+      if (!target.alive) shooter.score += 1;
+
+      // Метка попадания. Ставим её в ТОЧКУ ЛУЧА, а не в центр танка:
+      // так видно, куда именно пришёлся выстрел, — по носу зацепил
+      // или прошил насквозь.
+      const kill = !target.alive;
+      hitMarks.push({
+        x: px, y: py, kill,
+        life: 1,
+        span: kill ? CONFIG.fx.killTime : CONFIG.fx.markTime
+      });
+      break;
+    }
+  }
+
+  beams.push({ x1:startX, y1:startY, x2:endX, y2:endY, life:CONFIG.rail.beamTime, hit:didHit });
+}
+
+/* Есть ли чистая линия от точки до танка — нужно боту, чтобы
+   не палить в стену. Тот же проход по лучу, только без урона.      */
+function hasLineOfSight(fromX, fromY, target){
+  const dx = target.x - fromX, dy = target.y - fromY;
+  const dist = Math.hypot(dx, dy);
+  const ux = dx / dist, uy = dy / dist;
+  for (let d = 0; d < dist; d += 5){
+    const px = fromX + ux * d, py = fromY + uy * d;
+    if (OBSTACLES.some(o => pointInRect(px, py, o))) return false;
+  }
+  return true;
+}
+
+/* ==================================================================
+   ЧАСТЬ 5. УПРАВЛЕНИЕ ИГРОКА
+   ================================================================== */
+/* Управление полностью с клавиатуры:
+     стрелки (или WASD) — корпус
+     Z / X               — башня влево / вправо
+     Пробел              — ДЕРЖАТЬ для накопления заряда, выстрел сам
+   Мышь больше не нужна.                                            */
+const keys = {};                       // какие клавиши сейчас зажаты
+let mouseHeld = false;                 // ЛКМ как дубль пробела
+
+addEventListener('keydown', e => {
+  // Пробел и стрелки прокручивают страницу — в бою это мешает.
+  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  keys[e.code] = true;
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d');
+// Зажатая мышь работает так же, как зажатый пробел.
+canvas.addEventListener('mousedown', () => { mouseHeld = true; });
+addEventListener('mouseup', () => { mouseHeld = false; });
+
+/* ==================================================================
+   ЧАСТЬ 6. БОТ
+   ------------------------------------------------------------------
+   Заглушка на месте второго игрока. Когда будем делать сеть, этот
+   блок заменится на команды, пришедшие с сервера, — а всё остальное
+   останется как есть. Поэтому он и возвращает ровно то же, что
+   даёт клавиатура: drive, rotate, aim, fire.
+   ================================================================== */
+const botState = { think: 0, strafeDir: 1, strafeTimer: 0, aimX: 0, aimY: 0, aimErr: 0, pause: 0 };
+
+function botThink(bot, enemy, dt){
+  const idle = { drive: 0, rotate: 0, turret: { toward: bot.turretAngle }, fire: false };
+  if (!bot.alive || !enemy.alive) return idle;
+
+  // Реакция: бот «видит» игрока с задержкой, а не мгновенно.
+  // Здесь же один раз берётся ошибка прицела — и держится весь такт.
+  //
+  // БЫЛ БАГ: ошибка бралась заново каждый кадр. 60 раз в секунду
+  // ствол дёргался в случайную сторону вокруг точной наводки, и в
+  // среднем это давало... идеальную точность. Случайность, которую
+  // пересчитывают слишком часто, перестаёт быть случайностью.
+  // Правило: разброс живёт столько же, сколько решение, которое он портит.
+  botState.think -= dt;
+  if (botState.think <= 0){
+    botState.think = CONFIG.bot.reaction;
+    botState.aimX = enemy.x;
+    botState.aimY = enemy.y;
+    botState.aimErr = (Math.random() - 0.5) * 2 * CONFIG.bot.aimError;
+  }
+
+  // Прицеливание в запомненную точку плюс ошибка этого такта.
+  const aim = Math.atan2(botState.aimY - bot.y, botState.aimX - bot.x) + botState.aimErr;
+
+  // Раз в несколько секунд меняет сторону обхода — чтобы не был мишенью.
+  botState.strafeTimer -= dt;
+  if (botState.strafeTimer <= 0){
+    botState.strafeTimer = CONFIG.bot.strafe;
+    botState.strafeDir *= -1;
+  }
+
+  // Куда ехать. В Death Match бот кружит вокруг игрока на снайперской
+  // дистанции. В CTF у него есть задача поважнее — флаг, и он прёт
+  // к ней, отстреливаясь на ходу.
+  const obj = botObjective(bot);
+  let desired;
+  if (obj){
+    desired = Math.atan2(obj.y - bot.y, obj.x - bot.x);
+  } else {
+    // Держит снайперскую дистанцию: далеко — сближается, близко — отходит.
+    const dist = Math.hypot(enemy.x - bot.x, enemy.y - bot.y);
+    const toEnemy = Math.atan2(enemy.y - bot.y, enemy.x - bot.x);
+    desired = dist > CONFIG.bot.keepDist
+      ? toEnemy                                        // едем на врага
+      : toEnemy + Math.PI / 2 * botState.strafeDir;    // идём по дуге вбок
+  }
+
+  const diff = wrapAngle(desired - bot.bodyAngle);
+  const rotate = Math.abs(diff) < 0.05 ? 0 : Math.sign(diff);
+  const drive = Math.abs(diff) < 1.0 ? 1 : 0;          // не едет, пока не довернул
+
+  // Пауза после выстрела. Пока рельса на перезарядке, взводим таймер;
+  // когда перезарядка кончится, бот ещё немного помедлит.
+  // Без этого он начинал копить в ту же секунду и давил бесконечно.
+  if (bot.cooldown > 0){
+    botState.pause = CONFIG.bot.pause * (0.5 + Math.random());
+  } else {
+    botState.pause = Math.max(0, botState.pause - dt);
+  }
+
+  // Держит огонь, пока ствол наведён и стена не мешает.
+  // Заряд копится так же, как у игрока, — значит, ты видишь
+  // фиолетовый шар у его дула и успеваешь уйти с линии.
+  // Сбитый прицел работает и на бота: пока aimKick не затух,
+  // проверка не проходит, он отпускает огонь и теряет заряд.
+  const aimed = Math.abs(wrapAngle(aim - bot.aimAngle)) < 0.07;
+  const fire = aimed && botState.pause <= 0 && hasLineOfSight(bot.x, bot.y, enemy);
+
+  return { drive, rotate, turret: { toward: aim }, fire };
+}
+
+/* ==================================================================
+   ЧАСТЬ 6.5. РЕЖИМЫ БОЯ И ФЛАГИ
+   ------------------------------------------------------------------
+   Правила живут отдельно от танков. Танк умеет ездить и стрелять —
+   и всё; он не знает, идёт бой за фраги или за флаги. Поэтому
+   переключение режима не трогает физику, а третий режим потом
+   добавится, не сломав первые два.
+
+   Флаг бывает в трёх состояниях:
+     'home'    — стоит на своей базе
+     'carried' — его везёт танк
+     'dropped' — брошен там, где носильщика убили
+
+   Правило захвата — как в оригинале: занести чужой флаг на свою базу
+   можно, только если СВОЙ флаг на месте. Иначе обе команды просто
+   разъезжаются с флагами и игра превращается в гонку.
+   ================================================================== */
+const GAME = { mode: 'dm', target: 5 };
+
+const flags = {
+  player: { state: 'home', x: 0, y: 0, timer: 0 },  // флаг игрока, за ним едет бот
+  bot:    { state: 'home', x: 0, y: 0, timer: 0 }   // флаг бота, за ним едешь ты
+};
+
+function resetFlags(){
+  for (const side of ['player', 'bot']){
+    flags[side].state = 'home';
+    flags[side].x = BASES[side].x;
+    flags[side].y = BASES[side].y;
+    flags[side].timer = 0;
+  }
+}
+
+// Везёт ли этот танк чужой флаг.
+function carriedFlagOf(side){
+  const enemy = side === 'player' ? 'bot' : 'player';
+  return flags[enemy].state === 'carried' ? flags[enemy] : null;
+}
+
+function updateCTF(dt, tanks){
+  if (GAME.mode !== 'ctf') return;
+
+  for (const side of ['player', 'bot']){
+    const flag = flags[side];
+    const owner = tanks[side];                       // чей это флаг
+    const thief = tanks[side === 'player' ? 'bot' : 'player'];  // кто за ним охотится
+
+    // 1. Флаг едет вместе с носильщиком.
+    if (flag.state === 'carried'){
+      flag.x = thief.x;
+      flag.y = thief.y;
+
+      // Носильщика убили — флаг падает на месте.
+      if (!thief.alive){
+        flag.state = 'dropped';
+        flag.timer = CONFIG.ctf.returnTime;
+      }
+    }
+
+    // 2. Брошенный флаг сам возвращается домой через время.
+    else if (flag.state === 'dropped'){
+      flag.timer -= dt;
+      const back = flag.timer <= 0 ||
+        (owner.alive && Math.hypot(owner.x - flag.x, owner.y - flag.y) < CONFIG.ctf.pickup);
+      if (back){                                     // хозяин коснулся — вернулся сразу
+        flag.state = 'home';
+        flag.x = BASES[side].x;
+        flag.y = BASES[side].y;
+      }
+    }
+
+    // 3. Флаг на базе — его может подхватить противник.
+    if (flag.state === 'home' && thief.alive &&
+        Math.hypot(thief.x - flag.x, thief.y - flag.y) < CONFIG.ctf.pickup){
+      flag.state = 'carried';
+    }
+  }
+
+  // 4. Захват. Проверяем отдельно, потому что тут участвуют оба флага.
+  for (const side of ['player', 'bot']){
+    const tank = tanks[side];
+    const stolen = carriedFlagOf(side);
+    if (!stolen || !tank.alive) continue;
+
+    const base = BASES[side];
+    const atBase = Math.hypot(tank.x - base.x, tank.y - base.y) < CONFIG.ctf.baseR;
+    const ownFlagHome = flags[side].state === 'home';
+
+    if (atBase && ownFlagHome){
+      tank.score += 1;
+      const enemy = side === 'player' ? 'bot' : 'player';
+      flags[enemy].state = 'home';
+      flags[enemy].x = BASES[enemy].x;
+      flags[enemy].y = BASES[enemy].y;
+    }
+  }
+}
+
+/* Куда боту ехать в этом режиме. Возвращает точку или null,
+   если цели нет и надо просто драться.                             */
+function botObjective(bot){
+  if (GAME.mode !== 'ctf') return null;
+  // Везёт флаг — домой. Не везёт — за чужим флагом.
+  return carriedFlagOf('bot') ? BASES.bot : flags.player;
+}
+
+/* ==================================================================
+   ЧАСТЬ 7. РИСОВАНИЕ
+   ================================================================== */
+
+// Пол арены: песок с редкими полосами, чтобы читалось движение.
+function drawFloor(){
+  ctx.fillStyle = '#c9b896';
+  ctx.fillRect(0, 0, CONFIG.world.w, CONFIG.world.h);
+
+  ctx.strokeStyle = 'rgba(35,34,30,.07)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CONFIG.world.w; x += 60){
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CONFIG.world.h); ctx.stroke();
+  }
+  for (let y = 0; y <= CONFIG.world.h; y += 60){
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CONFIG.world.w, y); ctx.stroke();
+  }
+}
+
+// Бетонные блоки. Тень снизу-справа даёт им объём при виде сверху.
+function drawObstacles(){
+  for (const o of OBSTACLES){
+    ctx.fillStyle = 'rgba(35,34,30,.18)';
+    ctx.fillRect(o.x + 5, o.y + 5, o.w, o.h);
+    ctx.fillStyle = '#8a8272';
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+    ctx.strokeStyle = '#6d6659';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(o.x + 1, o.y + 1, o.w - 2, o.h - 2);
+  }
+}
+
+/* Танк рисуем через сдвиг и поворот системы координат:
+   переносим ноль в центр танка, поворачиваем — и дальше рисуем
+   так, будто танк стоит в нуле и смотрит вправо. Так гораздо проще,
+   чем считать координаты каждого угла вручную.                     */
+function drawTank(t, isPlayer){
+  if (!t.alive){
+    // Пятно на месте уничтоженного танка.
+    ctx.fillStyle = 'rgba(35,34,30,.22)';
+    ctx.beginPath(); ctx.arc(t.x, t.y, t.radius * 1.3, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+
+  const r = t.radius;
+  const L = t.hull.len, W = t.hull.wid;        // длина и ширина корпуса
+  const hl = L / 2, hw = W / 2;                // половины — от центра танка
+
+  /* Контур корпуса как список точек. Раньше я рисовал его линиями
+     прямо в коде, и чтобы поменять форму, надо было переписывать
+     всю функцию. Список точек правится одной строкой — и он же
+     переиспользуется для тени, заливки и обводки.
+     Оси: x вперёд (по ходу танка), y вбок.                        */
+  let outline;
+  if (t.hull.shape === 'notched'){
+    // Васп: прямоугольник с П-образным вырезом на корме.
+    // Корпус узкий, поэтому вырез сделан глубоким и относительно
+    // широким — иначе на такой ширине его просто не видно.
+    const nHw = hw * 0.46;                     // полуширина выреза
+    const nD  = 13;                            // насколько вырез врезан вперёд
+    outline = [
+      [ hl, -hw], [ hl,  hw],                  // нос
+      [-hl,  hw],                              // корма, правый угол
+      [-hl,  nHw], [-hl + nD,  nHw],           // вход в вырез
+      [-hl + nD, -nHw], [-hl, -nHw],           // дно выреза и выход
+      [-hl, -hw]                               // корма, левый угол
+    ];
+  } else {
+    // Хорнет: простой прямоугольник со срезанными носовыми углами.
+    outline = [
+      [hl - 5, -hw], [hl, -hw + 5], [hl, hw - 5], [hl - 5, hw],
+      [-hl, hw], [-hl, -hw]
+    ];
+  }
+
+  // Рисует контур со сдвигом (сдвиг нужен для тени).
+  const hullPath = (ox = 0, oy = 0) => {
+    ctx.beginPath();
+    outline.forEach(([px, py], i) =>
+      i ? ctx.lineTo(px + ox, py + oy) : ctx.moveTo(px + ox, py + oy));
+    ctx.closePath();
+  };
+
+  // --- корпус ---
+  ctx.save();
+  ctx.translate(t.x, t.y);
+  ctx.rotate(t.bodyAngle);
+
+  ctx.fillStyle = 'rgba(35,34,30,.25)';        // тень
+  hullPath(3, 3); ctx.fill();
+
+  // Гусеницы по бокам, прямые.
+  ctx.fillStyle = '#2f2e29';
+  for (const side of [-1, 1]){
+    const yOut = side * (hw + 2), yIn = side * (hw - 5);
+    ctx.fillRect(-hl - 1, Math.min(yIn, yOut), L + 2, Math.abs(yOut - yIn));
+
+    // Траки — поперечные насечки, чтобы гусеница читалась.
+    ctx.strokeStyle = 'rgba(200,200,200,.13)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 8; i++){
+      const x = -hl + L * (i / 8);
+      ctx.beginPath(); ctx.moveTo(x, yIn); ctx.lineTo(x, yOut); ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = t.hull.color;                // сам корпус
+  hullPath(); ctx.fill();
+  ctx.strokeStyle = '#23221e';
+  ctx.lineWidth = 2;
+  hullPath(); ctx.stroke();
+
+  // Блик на носовой броне — показывает, где перед.
+  ctx.fillStyle = 'rgba(255,255,255,.15)';
+  ctx.fillRect(hl - 13, -hw + 4, 11, W - 8);
+
+  // Тёмная полоса на корме, чтобы нос и корма не путались,
+  // когда танк едет прямо на тебя.
+  ctx.fillStyle = 'rgba(35,34,30,.35)';
+  ctx.fillRect(-hl + 2, -hw + 4, 5, W - 8);
+  ctx.restore();
+
+  // --- башня с рельсой ---
+  // Свой поворот И своя точка опоры: у Васпа она сдвинута к корме.
+  const piv = turretPivot(t);
+  const barrel = t.hull.barrel;
+
+  ctx.save();
+  ctx.translate(piv.x, piv.y);
+  ctx.rotate(t.aimAngle);
+
+  // Основание — казённая коробка, из которой растёт ствол.
+  // Она остаётся массивной: контраст «толстая казна — тонкий ствол»
+  // и делает силуэт рельсы узнаваемым.
+  ctx.fillStyle = '#3a3831';
+  ctx.fillRect(-10, -8, 24, 16);
+  ctx.strokeStyle = '#23221e';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(-10, -8, 24, 16);
+
+  /* Ствол. Рельсотрон — это буквально ДВЕ параллельные направляющие,
+     между которыми разгоняется снаряд. Раньше я лепил поперёк ствола
+     толстые катушки, и он выглядел как бревно. Теперь текстура идёт
+     ВДОЛЬ: две тонкие рельсы плюс мелкие рёбра между ними.
+     Сам ствол при этом почти нитка — 4 пикселя у казны, 3 у дула. */
+  const bx0 = 12;                              // где начинается ствол
+  ctx.fillStyle = '#2a2925';
+  ctx.beginPath();
+  ctx.moveTo(bx0, -2.2); ctx.lineTo(barrel, -1.6);
+  ctx.lineTo(barrel, 1.6); ctx.lineTo(bx0, 2.2);
+  ctx.closePath(); ctx.fill();
+
+  // Две направляющие вдоль ствола — та самая «рельсовость».
+  for (const side of [-1, 1]){
+    ctx.strokeStyle = side < 0 ? '#6a675d' : '#413e37';  // верхняя светлее
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(bx0, side * 3.4);
+    ctx.lineTo(barrel - 3, side * 2.6);
+    ctx.stroke();
+
+    // Заряд бежит по направляющим от казны к дулу.
+    if (t.charge > 0){
+      ctx.strokeStyle = `rgba(167,90,247,${t.charge * 0.85})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(bx0, side * 3.4);
+      ctx.lineTo(bx0 + (barrel - 3 - bx0) * t.charge, side * (3.4 - 0.8 * t.charge));
+      ctx.stroke();
+    }
+  }
+
+  // Мелкие рёбра-перемычки между рельсами. Маленькие: они дают
+  // фактуру, а не толщину.
+  ctx.fillStyle = '#4f4c44';
+  for (let i = 0; i < 6; i++){
+    const x = bx0 + 4 + i * ((barrel - bx0 - 10) / 5.5);
+    ctx.fillRect(x, -3.2, 1.6, 6.4);
+  }
+
+  // Дульный срез — короткий и узкий.
+  ctx.fillStyle = '#57544a';
+  ctx.fillRect(barrel - 4, -3.4, 4, 6.8);
+
+  // Купол башни поверх основания.
+  ctx.beginPath();
+  ctx.arc(0, 0, 9.5, 0, Math.PI * 2);
+  ctx.fillStyle = t.hull.color;
+  ctx.fill();
+  ctx.strokeStyle = '#23221e';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // Люк — маленькая деталь, но силуэт сразу перестаёт быть «фигуркой».
+  ctx.beginPath();
+  ctx.arc(-1, 0, 4, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(35,34,30,.45)';
+  ctx.fill();
+  ctx.restore();
+
+  // --- накопление энергии у дула ---
+  // Сгусток растёт вместе с charge и пульсирует. Это честное
+  // предупреждение противнику: видишь фиолетовый шар — уходи с линии.
+  if (t.charge > 0){
+    const m = muzzle(t);
+    const c = t.charge;
+    // Лёгкая пульсация: синус от времени. Чем полнее заряд, тем чаще.
+    const pulse = 1 + Math.sin(performance.now() / 1000 * (8 + c * 14)) * 0.12;
+    const rad = (3 + c * 9) * pulse;
+
+    // Ореол — рисуем градиентом, чтобы свет мягко сходил на нет.
+    const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, rad * 3.2);
+    g.addColorStop(0,   `rgba(167,90,247,${0.55 * c})`);
+    g.addColorStop(0.5, `rgba(124,58,237,${0.22 * c})`);
+    g.addColorStop(1,   'rgba(124,58,237,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(m.x, m.y, rad * 3.2, 0, Math.PI * 2); ctx.fill();
+
+    // Ядро — почти белое, как раскалённый металл.
+    ctx.fillStyle = `rgba(243,232,255,${0.55 + 0.45 * c})`;
+    ctx.beginPath(); ctx.arc(m.x, m.y, rad, 0, Math.PI * 2); ctx.fill();
+
+    // Искры втягиваются в ствол по кругу — энергия идёт снаружи внутрь.
+    if (c > 0.35){
+      for (let i = 0; i < 3; i++){
+        const a = performance.now() / 220 + i * (Math.PI * 2 / 3);
+        const d = rad * 3.4 * (1 - (performance.now() / 400 + i / 3) % 1);
+        ctx.fillStyle = `rgba(216,180,254,${c * 0.8})`;
+        ctx.beginPath();
+        ctx.arc(m.x + Math.cos(a) * d, m.y + Math.sin(a) * d, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // --- лазерный прицел ---
+  // Только у игрока. Именно по нему видно, как попадание сбивает наводку.
+  // Идёт строго от дула — то есть с учётом того, что башня сдвинута.
+  if (isPlayer){
+    const m = muzzle(t);
+    const dirX = Math.cos(t.aimAngle), dirY = Math.sin(t.aimAngle);
+    let len = CONFIG.rail.range;
+    for (let d = 0; d < CONFIG.rail.range; d += 5){
+      const px = m.x + dirX * d, py = m.y + dirY * d;
+      if (px < 0 || py < 0 || px > CONFIG.world.w || py > CONFIG.world.h ||
+          OBSTACLES.some(o => pointInRect(px, py, o))){ len = d; break; }
+    }
+    // Нить прицела разгорается по мере накопления заряда.
+    ctx.strokeStyle = `rgba(167,90,247,${0.3 + t.charge * 0.5})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(m.x, m.y);
+    ctx.lineTo(m.x + dirX * len, m.y + dirY * len);
+    ctx.stroke();
+  }
+
+  // --- полоски здоровья над танком ---
+  const pipW = 13, gap = 3;
+  const total = CONFIG.hp * pipW + (CONFIG.hp - 1) * gap;
+  for (let i = 0; i < CONFIG.hp; i++){
+    ctx.fillStyle = i < t.hp ? (isPlayer ? '#3d6e8c' : '#b04a33') : 'rgba(35,34,30,.22)';
+    ctx.fillRect(t.x - total / 2 + i * (pipW + gap), t.y - hl - 14, pipW, 4);
+  }
+
+  // --- шкала перезарядки ---
+  // Пустая шкала = рельса готова. Пока ползёт — выстрелить нельзя.
+  if (t.cooldown > 0){
+    const w = 30 * (t.cooldown / CONFIG.rail.reload);
+    ctx.fillStyle = 'rgba(35,34,30,.18)';
+    ctx.fillRect(t.x - 15, t.y + hl + 8, 30, 3);
+    ctx.fillStyle = '#e8c547';
+    ctx.fillRect(t.x - 15, t.y + r + 9, w, 3);
+  }
+}
+
+/* След от выстрела. Испарение сделано двумя приёмами сразу:
+   яркость падает, а ореол при этом РАСШИРЯЕТСЯ и бледнеет —
+   как настоящий раскалённый воздух, который расходится и остывает.
+   Если бы просто гасили прозрачность, выглядело бы как выключенная
+   лампочка, а не как рассеивающийся плазменный след.               */
+function drawBeams(){
+  for (const b of beams){
+    const a = b.life / CONFIG.rail.beamTime;   // 1 в момент выстрела → 0 в конце
+    const spread = 1 - a;                      // насколько след уже расплылся
+
+    // Внешний ореол: расширяется и почти сразу бледнеет.
+    ctx.strokeStyle = `rgba(124,58,237,${a * a * 0.3})`;
+    ctx.lineWidth = 6 + spread * 22;
+    ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
+
+    // Средний слой — насыщенный фиолет, держится дольше ореола.
+    ctx.strokeStyle = `rgba(167,90,247,${a * 0.55})`;
+    ctx.lineWidth = 3 + spread * 7;
+    ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
+
+    // Ядро: тонкая почти белая нить, гаснет резко (a в кубе).
+    ctx.strokeStyle = `rgba(243,232,255,${a * a * a})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
+
+    // Вспышка в точке попадания — расходящееся кольцо.
+    if (b.hit){
+      ctx.strokeStyle = `rgba(216,180,254,${a * a})`;
+      ctx.lineWidth = 2 + a * 2;
+      ctx.beginPath(); ctx.arc(b.x2, b.y2, 5 + spread * 26, 0, Math.PI * 2); ctx.stroke();
+
+      ctx.fillStyle = `rgba(243,232,255,${a * a})`;
+      ctx.beginPath(); ctx.arc(b.x2, b.y2, 10 * a, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+}
+
+/* Базы и флаги. Рисуются только в CTF.                            */
+function drawCTF(){
+  if (GAME.mode !== 'ctf') return;
+
+  // Базы — круги на земле. Пунктир, чтобы не спорить с бетоном.
+  for (const side of ['player', 'bot']){
+    const b = BASES[side];
+    ctx.strokeStyle = side === 'player' ? 'rgba(61,110,140,.75)' : 'rgba(176,74,51,.75)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath(); ctx.arc(b.x, b.y, CONFIG.ctf.baseR, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);                     // обязательно сбросить!
+  }
+
+  for (const side of ['player', 'bot']){
+    const f = flags[side];
+    const color = side === 'player' ? '#3d6e8c' : '#b04a33';
+
+    // Брошенный флаг мигает тем чаще, чем меньше времени до возврата.
+    // Не таймер цифрами — а то, что видно, не отрывая взгляда от боя.
+    let alpha = 1;
+    if (f.state === 'dropped'){
+      const urgency = 1 - f.timer / CONFIG.ctf.returnTime;
+      alpha = 0.45 + 0.55 * Math.abs(Math.sin(performance.now() / (400 - urgency * 280)));
+    }
+
+    ctx.globalAlpha = alpha;
+    // Древко.
+    ctx.strokeStyle = '#23221e';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(f.x, f.y + 6); ctx.lineTo(f.x, f.y - 16); ctx.stroke();
+    // Полотнище.
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(f.x + 1, f.y - 16);
+    ctx.lineTo(f.x + 15, f.y - 11);
+    ctx.lineTo(f.x + 1, f.y - 6);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#23221e'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+/* Метка попадания — крестик из четырёх штрихов, которые
+   РАЗЛЕТАЮТСЯ от точки удара и всплывают вверх.
+   Приём старый и надёжный: глаз ловит движение лучше, чем цвет.
+   Статичный значок на секунду в горячем бою просто не заметишь,
+   а расходящийся — видно боковым зрением, не отрывая взгляда
+   от собственного прицела.                                        */
+function drawHitMarks(){
+  for (const m of hitMarks){
+    const a = m.life;                    // 1 в момент удара → 0 в конце
+    const grow = 1 - a;                  // насколько метка уже разошлась
+    const rise = grow * 12;              // всплывает вверх
+
+    const cx = m.x, cy = m.y - rise;
+    const gap = 4 + grow * 9;            // отступ штриха от центра
+    const len = 6 - grow * 2;            // сам штрих чуть укорачивается
+
+    // Добивание отмечаем янтарным и толще — это событие крупнее.
+    ctx.strokeStyle = m.kill
+      ? `rgba(232,197,71,${a})`
+      : `rgba(243,232,255,${a})`;
+    ctx.lineWidth = (m.kill ? 3 : 2.2) * (0.4 + a * 0.6);
+    ctx.lineCap = 'round';
+
+    // Четыре штриха по диагоналям. Цикл по двум знакам вместо
+    // четырёх ручных линий: меньше кода и невозможно ошибиться
+    // в одной из копий.
+    for (const sx of [-1, 1]){
+      for (const sy of [-1, 1]){
+        ctx.beginPath();
+        ctx.moveTo(cx + sx * gap, cy + sy * gap);
+        ctx.lineTo(cx + sx * (gap + len), cy + sy * (gap + len));
+        ctx.stroke();
+      }
+    }
+
+    // У добивания — ещё и расходящееся кольцо.
+    if (m.kill){
+      ctx.strokeStyle = `rgba(232,197,71,${a * a * 0.8})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 8 + grow * 30, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  ctx.lineCap = 'butt';                  // возвращаем как было
+}
+
+/* ==================================================================
+   ЧАСТЬ 8. ГЛАВНЫЙ ЦИКЛ
+   ------------------------------------------------------------------
+   Сердце любой игры: 60 раз в секунду посчитать состояние мира
+   и нарисовать его. Всё, что выше, — детали этих двух шагов.
+   ================================================================== */
+let player, bot, running = false, lastTime = 0;
+
+const overlay  = document.getElementById('overlay');
+const titleEl  = document.getElementById('title');
+const subEl    = document.getElementById('subtitle');
+const scorePEl = document.getElementById('scoreP');
+const scoreBEl = document.getElementById('scoreB');
+
+function newMatch(){
+  player = new Tank('hornet',  70, 530, -Math.PI / 4);
+  bot    = new Tank('wasp',   830,  70,  Math.PI * 0.75);
+  // Башня бота крутится медленнее твоей — это его главная слабость.
+  // Обходи его по дуге, и он не будет успевать за тобой стволом.
+  bot.turretSpeed = CONFIG.bot.turretTurn;
+  beams.length = 0;
+  hitMarks.length = 0;
+  resetFlags();
+  scorePEl.textContent = scoreBEl.textContent = '0';
+}
+
+function tick(now){
+  if (!running) return;
+
+  // Сколько секунд прошло с прошлого кадра. Ограничиваем сверху:
+  // если свернуть вкладку, dt станет огромным и танки телепортируются.
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+
+  // --- 1. Читаем ввод игрока ---
+  // Приём с вычитанием: если зажаты обе клавиши, получится 0 —
+  // танк стоит, и не надо писать кучу if-ов.
+  // WASD оставлены как дубль стрелок, кому как удобнее.
+  const drive  = ((keys.ArrowUp   || keys.KeyW) ? 1 : 0)
+               - ((keys.ArrowDown || keys.KeyS) ? 1 : 0);
+  const rotate = ((keys.ArrowRight|| keys.KeyD) ? 1 : 0)
+               - ((keys.ArrowLeft || keys.KeyA) ? 1 : 0);
+  // Башня: Z — против часовой, X — по часовой.
+  const turret = (keys.KeyX ? 1 : 0) - (keys.KeyZ ? 1 : 0);
+  // Огонь удерживается: пока держишь — копится заряд.
+  const wantsFire = !!keys.Space || mouseHeld;
+
+  // --- 2. Спрашиваем бота, что он делает ---
+  const cmd = botThink(bot, player, dt);
+
+  // --- 3. Двигаем оба танка ---
+  player.update(dt, drive, rotate, { rotate: turret });
+  bot.update(dt, cmd.drive, cmd.rotate, cmd.turret);
+
+  // --- 4. Орудия: накопление и выстрел ---
+  updateWeapon(player, bot, wantsFire, dt);
+  updateWeapon(bot, player, cmd.fire, dt);
+
+  // --- 4.5. Правила режима ---
+  updateCTF(dt, { player, bot });
+
+  // --- 5. Гасим старые лучи и метки ---
+  // Идём с конца списка: splice сдвигает элементы, и при обычном
+  // проходе вперёд мы бы перепрыгивали через соседа.
+  for (let i = beams.length - 1; i >= 0; i--){
+    beams[i].life -= dt;
+    if (beams[i].life <= 0) beams.splice(i, 1);
+  }
+  for (let i = hitMarks.length - 1; i >= 0; i--){
+    // life хранится долей от 1, поэтому делим на срок жизни метки.
+    hitMarks[i].life -= dt / hitMarks[i].span;
+    if (hitMarks[i].life <= 0) hitMarks.splice(i, 1);
+  }
+
+  // --- 6. Рисуем кадр ---
+  drawFloor();
+  drawObstacles();
+  drawCTF();             // базы и флаги под танками
+  drawBeams();
+  drawTank(bot, false);
+  drawTank(player, true);
+  drawHitMarks();        // метки поверх всего — их нельзя пропустить
+
+  // --- 7. Счёт и конец матча ---
+  scorePEl.textContent = player.score;
+  scoreBEl.textContent = bot.score;
+
+  if (player.score >= GAME.target || bot.score >= GAME.target){
+    endMatch(player.score > bot.score);
+    return;
+  }
+
+  requestAnimationFrame(tick);
+}
+
+function startMatch(){
+  // Читаем настройки из меню ровно один раз — в момент старта.
+  // clamp страхует от пустого поля и от того, что кто-то впишет 0
+  // или 900: браузерные min/max в input — подсказка, а не защита.
+  const typed = parseInt(targetInput.value, 10);
+  GAME.target = clamp(isNaN(typed) ? 5 : typed, 1, 99);
+
+  newMatch();
+  overlay.classList.add('hidden');
+  running = true;
+  lastTime = performance.now();
+  requestAnimationFrame(tick);
+}
+
+function endMatch(playerWon){
+  running = false;
+  titleEl.textContent = playerWon ? 'Бой выигран' : 'Бой проигран';
+  subEl.innerHTML = `${CONFIG.modes[GAME.mode].name}<br>Счёт ${player.score} : ${bot.score}`;
+  startBtn.textContent = 'Ещё раз';
+  overlay.classList.remove('hidden');
+}
+
+/* --- Меню --- */
+const startBtn    = document.getElementById('startBtn');
+const targetInput = document.getElementById('targetInput');
+const targetWord  = document.getElementById('targetWord');
+const goalEl      = document.querySelector('.goal');
+
+// Приводит меню и шапку в соответствие выбранному режиму.
+function applyMode(){
+  const m = CONFIG.modes[GAME.mode];
+  targetWord.textContent = m.word;
+  targetInput.value = m.defTarget;
+  document.querySelectorAll('.mode').forEach(b =>
+    b.classList.toggle('is-on', b.dataset.mode === GAME.mode));
+  goalEl.textContent = `${m.name} · до ${m.defTarget} ${m.word}`;
+}
+
+document.querySelectorAll('.mode').forEach(btn => {
+  btn.addEventListener('click', () => {
+    GAME.mode = btn.dataset.mode;
+    applyMode();
+    // Перерисовываем арену, чтобы базы и флаги появились сразу,
+    // ещё до начала боя — так видно, что режим переключился.
+    newMatch();
+    drawFloor(); drawObstacles(); drawCTF();
+    drawTank(bot, false); drawTank(player, true);
+  });
+});
+
+// Число в шапке обновляем на лету, пока человек его правит.
+targetInput.addEventListener('input', () => {
+  const m = CONFIG.modes[GAME.mode];
+  goalEl.textContent = `${m.name} · до ${targetInput.value || '?'} ${m.word}`;
+});
+
+startBtn.addEventListener('click', startMatch);
+
+// Версия берётся из одной константы наверху — так номер на экране
+// и номер в истории изменений не разъедутся.
+document.getElementById('ver').textContent = `прототип · v${VERSION} · сеть будет позже`;
+
+// Показываем статичную арену до начала боя, чтобы экран не был пустым.
+applyMode();
+newMatch();
+drawFloor(); drawObstacles(); drawCTF(); drawTank(bot, false); drawTank(player, true);
+</script>
+</body>
+</html>

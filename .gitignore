@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# редакторы
+*.swp
+*~
+.idea/
+
+# служебное Claude Code (локальные модули/заметки процесса)
+.modules/.cache/
