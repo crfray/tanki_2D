@@ -93,6 +93,34 @@
   #targetInput:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
 
   footer{font-size:10px;letter-spacing:.14em;opacity:.45;padding-top:10px;text-align:center}
+
+  /* --- Гараж. Контейнер во весь канвас, но прозрачный и «сквозной»
+     для кликов: панели сверху/снизу ловят мышь, а центр (где крутится
+     танк) остаётся видимым. --- */
+  #garage{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:space-between;
+    padding:16px;pointer-events:none;
+  }
+  #garage.hidden{display:none}
+  #garage > *{pointer-events:auto}
+  #garageTop{
+    background:rgba(35,34,30,.82);border-radius:6px;padding:8px 16px;
+    color:var(--amber);font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+  }
+  #garageBottom{
+    background:rgba(35,34,30,.86);border-radius:8px;padding:14px 18px;
+    display:flex;flex-direction:column;align-items:center;gap:12px;max-width:96%;
+  }
+  .garage-cols{display:flex;gap:28px;flex-wrap:wrap;justify-content:center}
+  .garage-group{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .glabel{font-size:10px;letter-spacing:.22em;text-transform:uppercase;opacity:.6}
+  .picks{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  #garageStats{
+    font-size:11px;line-height:1.7;opacity:.85;text-align:center;
+    min-height:1.7em;letter-spacing:.04em;
+  }
+  #garageStats b{color:var(--amber);font-weight:600}
 </style>
 </head>
 <body>
@@ -100,7 +128,7 @@
 
   <header>
     <div class="side">
-      <span class="label">Хорнет · ты</span>
+      <span class="label" id="playerLabel">Хорнет · ты</span>
       <span class="score steel" id="scoreP">0</span>
     </div>
     <div class="goal">до 5 побед</div>
@@ -132,6 +160,34 @@
         Попадание сбивает противнику прицел и срывает накопленный заряд.
       </p>
       <button id="startBtn">В бой</button>
+      <button id="garageBtn" class="mode">Гараж</button>
+    </div>
+
+    <!-- Гараж: превью танка на канвасе, панели сверху и снизу.
+         Фон прозрачный, чтобы был виден крутящийся танк между ними. -->
+    <div id="garage" class="hidden">
+      <div id="garageTop">Гараж · примерь корпус и пушку</div>
+      <div id="garageBottom">
+        <div class="garage-cols">
+          <div class="garage-group">
+            <span class="glabel">Корпус</span>
+            <div class="picks">
+              <button class="mode gpick is-on" data-hull="hornet">Хорнет</button>
+              <button class="mode gpick" data-hull="wasp">Васп</button>
+            </div>
+          </div>
+          <div class="garage-group">
+            <span class="glabel">Пушка</span>
+            <div class="picks">
+              <button class="mode tpick is-on" data-turret="railgun">Рельса</button>
+              <button class="mode tpick" data-turret="twins">Твинс</button>
+              <button class="mode tpick" data-turret="smoky">Смоки</button>
+            </div>
+          </div>
+        </div>
+        <div id="garageStats"></div>
+        <button id="garageDone">Готово</button>
+      </div>
     </div>
   </div>
 
@@ -153,6 +209,24 @@
    ИСТОРИЯ ИЗМЕНЕНИЙ
    -----------------
    0.10 (в работе)
+        Третья пушка — Смоки: один ствол, обычный снаряд, перезарядка 2 с,
+        накопления нет. Урон падает с дистанцией: четыре выстрела до
+        смерти вблизи и восемь с конца карты. Крит 15% удваивает урон.
+        Дымок у дула, болванка с хвостом пламени в полёте.
+        Попадания в бетон оставляют следы, размер свой у каждой пушки.
+        Луч рельсы тоньше, поверх него слой мелких зубчиков.
+        Крит смоки видно: по танку секунду бежит жёлтая молния.
+        Летящие снаряды стали общими на все пушки: один расчёт траектории,
+        а урон и вид снаряда спрашиваются у самой пушки.
+        Баланс рельсы: перезарядка 1.5 -> 4 с, ближе к оригиналу (4.32).
+        Рельса — медленная снайперка; между ней и твинсом освободилось
+        место для пушек среднего темпа.
+        Вторая пушка — Твинс: два дула стреляют по очереди, ни накопления,
+        ни перезарядки; держишь огонь — идут красные плазменные шарики.
+        Снаряд летит, поэтому по движущейся цели нужно упреждение.
+        Восемь попаданий до смерти; заряд рельсы очередь не срывает.
+        Реестр TURRETS теперь держит и повадки пушки, а не только рисунок.
+        Полоски здоровья заполняются дробно — иначе четвертной урон не виден.
         CTF: победа только по числу захватов (убийства больше не
         приближают к победе). Индикация носильщика — кольцо в цвете
         флага и поднятое древко. Брошенный флаг возвращается через 20 с.
@@ -237,7 +311,10 @@ const CONFIG = {
 
   rail: {
     charge: 1.05,       // сколько держать огонь, пока копится энергия
-    reload: 1.5,        // секунд между выстрелами
+    // Пауза между выстрелами. Держим близко к оригиналу (4.32): рельса
+    // должна быть медленной снайперкой, а не скорострелкой. Именно этот
+    // разрыв даёт место пушкам между ней и твинсом — тому же смоки.
+    reload: 4,
     range: 1400,        // дальность луча
     beamTime: 0.55,     // сколько секунд след испаряется после выстрела
 
@@ -253,6 +330,71 @@ const CONFIG = {
     chargeSlowTurret: 0.6,
 
     aimKick: 0.55       // насколько сильно сбивает прицел при попадании (рад)
+  },
+
+  // Твинс — полная противоположность рельсе. Не копит и не
+  // перезаряжается: держишь огонь — дула работают ПО ОЧЕРЕДИ с
+  // постоянным интервалом. И снаряд у него настоящий, летящий:
+  // по движущейся цели надо брать упреждение, а не просто навести.
+  twins: {
+    interval: 0.35,     // секунд между выстрелами (левое дуло → правое)
+    speed: 520,         // скорость шарика, px/с (танк едет ~120)
+    damage: 0.25,       // четверть деления: 8 попаданий до смерти при hp = 2
+    radius: 4.5,        // размер шарика, он же радиус попадания
+    // Длина дула от оси башни — РОВНО ПОЛОВИНА рельсовой (46). Твинс —
+    // пушка ближнего боя, и короткий ствол должен читаться с первого
+    // взгляда, а не выясняться по числу попаданий.
+    barrel: 23,
+    spread: 7,          // насколько дула разнесены от оси, в каждую сторону
+
+    // Вчетверо слабее рельсовой отдачи и БЕЗ срыва заряда. Иначе очередь
+    // держала бы рельсу в вечном сбросе накопления — та вообще не смогла
+    // бы выстрелить, и дуэль пушек превратилась бы в одностороннюю.
+    aimKick: 0.14,
+
+    color: '#ff4d3d',   // плазма по умолчанию красная
+    glow: '255,110,85'  // цвет ореола, отдельно — он светлее ядра
+  },
+
+  // Смоки — обычная танковая пушка посередине между рельсой и твинсом.
+  // Один ствол, один снаряд, быстрая перезарядка, дымок у дула.
+  smoky: {
+    reload: 2,          // вдвое быстрее рельсы (4 с) — это её главный признак
+    speed: 640,         // снаряд быстрее плазмы твинса: это болванка, не сгусток
+    radius: 5,          // радиус попадания
+    // Ствол короткий: половина рельсового минус единица. Смоки отличается
+    // от рельсы НЕ толщиной (она такая же тонкая, даже тоньше), а длиной.
+    barrel: 22,
+
+    // УРОН ПАДАЕТ С ДИСТАНЦИЕЙ — вот что делает смоки «medium-range».
+    // Жёсткого предела дальности нет: снаряд летит через всю арену, но
+    // на излёте кусает вдвое слабее. Отсюда и число выстрелов на убийство:
+    //   в упор  0.5 × 4 = 2 деления  → четыре выстрела
+    //   с конца 0.25 × 8 = 2 деления → восемь выстрелов
+    damage: 0.5,        // урон вблизи
+    damageFar: 0.25,    // урон на предельной дистанции
+    // Полный урон держим на всю обычную дуэльную дистанцию: на арене
+    // 900x600 бой идёт в основном в пределах 400 px, и «обычное
+    // расстояние = четыре выстрела» должно быть правдой именно там.
+    // Спад начинается дальше, а к длине арены (900) доходит до минимума.
+    falloffFrom: 400,   // до этой дистанции урон полный
+    falloffTo: 900,     // с этой и дальше — минимальный
+
+    // Крит. Случается независимо от дистанции и удваивает урон: с обычной
+    // дистанции критом снимает целое деление, и танку остаётся ровно два
+    // обычных выстрела. Шанс — тот самый «иногда».
+    critChance: 0.15,
+    critMult: 2,
+
+    aimKick: 0.3,       // между рельсовыми 0.55 и твинсовыми 0.14
+
+    // Дымок у дула — то, из-за чего пушка так и называется.
+    puffTime: 0.5,      // сколько живёт облачко
+    puffSize: 6,        // его начальный радиус
+
+    color: '#8a7f63',   // тело снаряда — тёмная латунь. Светлее нельзя:
+                        // на песке арены болванка потеряется
+    flame: '255,196,92' // хвост пламени за ней, желтоватый
   },
 
   hp: 2,                // сколько попаданий держит танк
@@ -350,6 +492,13 @@ const pointInRect = (px, py, r) =>
 class Tank {
   constructor(hullKey, x, y, angle){
     this.hull = CONFIG.hulls[hullKey];
+    // Пушка танка. Пока одна — рельса; выбор живёт в реестре TURRETS,
+    // так следующая добавится данными, а не правкой физики/рисования.
+    this.weapon = 'railgun';
+    // Краска отвязана от корпуса: цвет задаёт СТОРОНА (игрок/бот), а
+    // не модель. Иначе игрок на Васпе слился бы с ботом-Васпом. По
+    // умолчанию берём цвет корпуса, в newMatch переопределяем по стороне.
+    this.color = this.hull.color;
 
     this.spawnX = x;                 // куда возрождаться
     this.spawnY = y;
@@ -369,6 +518,11 @@ class Tank {
     // Сбитый прицел. При попадании сюда кладётся отдача,
     // и она сама затухает со временем в update().
     this.aimKick = 0;
+
+    // Какое дуло стреляет следующим: -1 левое, +1 правое. Нужно только
+    // твинсу, но живёт в танке — это состояние конкретной машины,
+    // а не описания пушки (реестр TURRETS один на всех).
+    this.barrelSide = -1;
 
     this.score = 0;
   }
@@ -473,13 +627,19 @@ class Tank {
     }
   }
 
-  takeHit(){
-    this.hp -= 1;
+  /* Попадание. Что именно оно делает, решает ПУШКА, а не танк:
+     рельса снимает целое деление, сбивает прицел и срывает заряд;
+     твинс кусает по четверти и лишь слегка водит стволом.
+     По умолчанию — рельсовое попадание.                            */
+  takeHit({ damage = 1,
+            aimKick = CONFIG.rail.aimKick,
+            breakCharge = true } = {}){
+    this.hp -= damage;
     // Вот оно — «сбитый прицел». Толчок в случайную сторону:
     // после попадания противник секунду не может нормально целиться.
-    this.aimKick += (Math.random() < 0.5 ? -1 : 1) * CONFIG.rail.aimKick;
+    this.aimKick += (Math.random() < 0.5 ? -1 : 1) * aimKick;
     // Накопленная энергия срывается. Попал первым — сбил чужой выстрел.
-    this.charge = 0;
+    if (breakCharge) this.charge = 0;
     if (this.hp <= 0) this.deadTimer = CONFIG.respawn;
   }
 
@@ -491,6 +651,7 @@ class Tank {
     this.cooldown = 0;
     this.charge = 0;
     this.aimKick = 0;
+    this.barrelSide = -1;
     this.deadTimer = 0;
   }
 }
@@ -513,6 +674,14 @@ class Tank {
    ================================================================== */
 const beams = [];   // испаряющиеся следы выстрелов: {x1,y1,x2,y2,life,hit}
 const hitMarks = []; // метки попаданий: {x,y,life,span,kill}
+// Летящие снаряды — общие на все пушки, у которых снаряд вообще есть
+// (у рельсы его нет, она бьёт лучом сразу). Что снаряд делает при
+// попадании и как выглядит — знает пушка из реестра TURRETS, поэтому
+// здесь только траектория и общие поля.
+// {x,y,vx,vy, ox,oy — откуда вылетел, weapon, owner, target}
+const shots = [];
+// Дымки у дула: расходящиеся облачка после выстрела. {x,y,life,span,r}
+const puffs = [];
 
 /* Ось башни. У Васпа она сдвинута к корме, а не стоит в центре.
    Смещение задано В СИСТЕМЕ КОРПУСА, поэтому крутится вместе с ним:
@@ -526,33 +695,42 @@ function turretPivot(t){
   };
 }
 
-/* Кончик ствола. Отсюда растёт сгусток и отсюда уходит луч —
-   поэтому координата считается одной функцией, а не двумя разными. */
-function muzzle(t){
+/* Длина ствола. По умолчанию её задаёт корпус, но пушка может
+   настоять на своей: у твинса дула короче рельсовых.               */
+function barrelLen(t){
+  const own = TURRETS[t.weapon].barrel;
+  return own === undefined ? t.hull.barrel : own;
+}
+
+/* Кончик ствола. Отсюда растёт сгусток, отсюда уходит луч и отсюда
+   вылетает шарик — поэтому координата считается одной функцией.
+   lateral — сдвиг ВБОК от оси башни: у твинса два дула, и каждое
+   стреляет из своей точки, а не из общего центра.                  */
+function muzzle(t, lateral = 0){
   const p = turretPivot(t);
+  const c = Math.cos(t.aimAngle), s = Math.sin(t.aimAngle);
+  const len = barrelLen(t);
   return {
-    x: p.x + Math.cos(t.aimAngle) * t.hull.barrel,
-    y: p.y + Math.sin(t.aimAngle) * t.hull.barrel
+    x: p.x + c * len - s * lateral,
+    y: p.y + s * len + c * lateral
   };
 }
 
+/* Очко за фраг. Правило одно на все пушки, поэтому живёт отдельно:
+   и рельса, и твинс зовут это после смертельного попадания.
+   Счёт за убийство идёт ТОЛЬКО в Death Match — в CTF победу приносят
+   захваты, а убийство лишь способ сбить носильщика.                */
+function scoreKill(shooter, target){
+  if (!target.alive && GAME.mode === 'dm') shooter.score += 1;
+}
+
 /* Один шаг работы орудия.
-   wantsFire — держит ли танкист кнопку огня прямо сейчас.          */
+   wantsFire — держит ли танкист кнопку огня прямо сейчас.
+   Как именно пушка себя ведёт, знает она сама — в реестре TURRETS.
+   Здесь только общее: мёртвый танк ничего не копит и не стреляет.  */
 function updateWeapon(shooter, target, wantsFire, dt){
   if (!shooter.alive){ shooter.charge = 0; return; }
-
-  if (wantsFire && shooter.cooldown <= 0){
-    // Копим. Делим на время зарядки, чтобы charge шёл ровно от 0 до 1.
-    shooter.charge += dt / CONFIG.rail.charge;
-    if (shooter.charge >= 1){
-      shooter.charge = 0;
-      fireRail(shooter, target);
-    }
-  } else {
-    // Отпустил — энергия стекает. Втрое быстрее, чем копилась:
-    // передумать дёшево, но не бесплатно.
-    shooter.charge = Math.max(0, shooter.charge - dt / CONFIG.rail.charge * 3);
-  }
+  TURRETS[shooter.weapon].step(shooter, target, wantsFire, dt);
 }
 
 function fireRail(shooter, target){
@@ -585,11 +763,8 @@ function fireRail(shooter, target){
     // Попали в танк.
     if (target.alive && Math.hypot(px - target.x, py - target.y) < target.radius){
       endX = px; endY = py; didHit = true;
-      target.takeHit();
-      // Счёт за фраг идёт ТОЛЬКО в Death Match. В CTF победу приносят
-      // захваты флага (updateCTF), а убийство — лишь способ сбить
-      // носильщика; само по себе оно к победе не приближает.
-      if (!target.alive && GAME.mode === 'dm') shooter.score += 1;
+      target.takeHit();          // без аргументов = полное рельсовое попадание
+      scoreKill(shooter, target);
 
       // Метка попадания. Ставим её в ТОЧКУ ЛУЧА, а не в центр танка:
       // так видно, куда именно пришёлся выстрел, — по носу зацепил
@@ -605,6 +780,103 @@ function fireRail(shooter, target){
   }
 
   beams.push({ x1:startX, y1:startY, x2:endX, y2:endY, life:CONFIG.rail.beamTime, hit:didHit });
+}
+
+/* Выстрел твинса. Дула работают ПО ОЧЕРЕДИ: стреляет то, чей черёд,
+   и очередь сразу переходит второму. Отсюда характерная качка очереди
+   влево-вправо — по ней твинс и узнаётся на глаз.
+   Шарики летят ПАРАЛЛЕЛЬНО оси прицела, каждый из своего дула: они не
+   сходятся в точку, поэтому на любой дистанции очередь кладётся двумя
+   близкими дорожками, а не одной.                                  */
+function firePlasma(shooter, target){
+  const cfg = CONFIG.twins;
+  const side = shooter.barrelSide;
+  shooter.barrelSide = -side;                 // следующий выстрел — из второго
+
+  const m = muzzle(shooter, side * cfg.spread);
+  const a = shooter.aimAngle;
+  shots.push({
+    x: m.x, y: m.y, ox: m.x, oy: m.y,
+    vx: Math.cos(a) * cfg.speed,
+    vy: Math.sin(a) * cfg.speed,
+    weapon: 'twins', owner: shooter, target
+  });
+}
+
+/* Выстрел смоки. Один ствол, обычный танковый снаряд. Урон считается
+   НЕ здесь, а в момент попадания: он зависит от пройденного пути,
+   поэтому снаряд запоминает точку вылета (ox, oy).                 */
+function fireShell(shooter, target){
+  const cfg = CONFIG.smoky;
+  const m = muzzle(shooter);
+  const a = shooter.aimAngle;
+  shots.push({
+    x: m.x, y: m.y, ox: m.x, oy: m.y,
+    vx: Math.cos(a) * cfg.speed,
+    vy: Math.sin(a) * cfg.speed,
+    weapon: 'smoky', owner: shooter, target
+  });
+
+  // Дымок у дула — то, из-за чего пушка и зовётся Smoky. Ставим его
+  // чуть впереди среза, чтобы облачко не сидело внутри ствола.
+  puffs.push({
+    x: m.x + Math.cos(a) * 4,
+    y: m.y + Math.sin(a) * 4,
+    life: 1, span: cfg.puffTime, r: cfg.puffSize
+  });
+}
+
+/* Во что упёрся снаряд на этом шаге. Возвращает true, если он погас
+   (улетел с арены, разбился о бетон или попал в танк).
+   Траектория и стены — общие для всех пушек; что делает попадание,
+   считает сама пушка в TURRETS[...].hit().                          */
+function shotImpact(b){
+  const gun = TURRETS[b.weapon];
+  const R = gun.shotRadius;
+
+  if (b.x < -R || b.y < -R ||
+      b.x > CONFIG.world.w + R || b.y > CONFIG.world.h + R) return true;
+
+  if (OBSTACLES.some(o => pointInRect(b.x, b.y, o))) return true;
+
+  const t = b.target;
+  if (t.alive && Math.hypot(b.x - t.x, b.y - t.y) < t.radius + R){
+    const hit = gun.hit(b);           // {damage, aimKick, breakCharge, crit}
+    t.takeHit(hit);
+    scoreKill(b.owner, t);
+
+    const kill = !t.alive;
+    hitMarks.push({
+      x: b.x, y: b.y, kill, crit: !!hit.crit,
+      life: 1,
+      span: kill ? CONFIG.fx.killTime : CONFIG.fx.markTime
+    });
+    return true;
+  }
+  return false;
+}
+
+/* Шаг всех снарядов. Летим ДРОБНЫМИ шагами, а не одним прыжком за кадр:
+   на 500–650 px/с при просадке кадра снаряд уходил бы на полсотни
+   пикселей и мог проскочить сквозь угол стены или мимо центра танка. */
+function updateShots(dt){
+  for (let i = shots.length - 1; i >= 0; i--){
+    const b = shots[i];
+    const steps = Math.max(1, Math.ceil(Math.hypot(b.vx, b.vy) * dt / 5));
+    let spent = false;
+    for (let s = 0; s < steps && !spent; s++){
+      b.x += b.vx * dt / steps;
+      b.y += b.vy * dt / steps;
+      spent = shotImpact(b);
+    }
+    if (spent) shots.splice(i, 1);
+  }
+
+  // Дымки просто стареют на месте.
+  for (let i = puffs.length - 1; i >= 0; i--){
+    puffs[i].life -= dt / puffs[i].span;
+    if (puffs[i].life <= 0) puffs.splice(i, 1);
+  }
 }
 
 /* Есть ли чистая линия от точки до танка — нужно боту, чтобы
@@ -875,7 +1147,367 @@ function drawObstacles(){
    переносим ноль в центр танка, поворачиваем — и дальше рисуем
    так, будто танк стоит в нуле и смотрит вправо. Так гораздо проще,
    чем считать координаты каждого угла вручную.                     */
-function drawTank(t, isPlayer){
+/* ------------------------------------------------------------------
+   РЕЕСТР ПУШЕК. Здесь и рисунок, и повадки: игровой цикл зовёт
+   TURRETS[t.weapon].step, а drawTank — .drawTurret, и ни один из них
+   не знает, что за пушка стоит. Добавить третью = дописать сюда объект.
+
+   Что должна дать пушка:
+     name        подпись в гараже
+     charges     копит ли энергию перед выстрелом (сгусток у дула)
+     step()      один шаг стрельбы: копить, стрелять, отсчитывать паузу
+     drawTurret()рисунок башни. Координаты ЛОКАЛЬНЫЕ: ctx уже перенесён
+                 в опору башни и повёрнут по aimAngle, +x — вперёд
+     stats()     строка характеристик для гаража
+     barrel      своя длина ствола (нет — берётся из корпуса)
+     hudReload   по чему рисовать шкалу перезарядки (нет — шкалы нет)
+     lateral()   откуда сейчас смотрит прицел (у твинса — из активного дула)
+     laser()     цвет нити прицела
+     shotRadius  радиус попадания снаряда (только у пушек со снарядом)
+     hit()       что делает попадание: {damage, aimKick, breakCharge, crit}
+     drawShot()  как выглядит снаряд в полёте
+   ------------------------------------------------------------------ */
+const TURRETS = {
+  railgun: {
+    name: 'Рельса',
+    charges: true,
+    hudReload: CONFIG.rail.reload,
+    lateral: () => 0,                         // ствол один, он же ось
+    laser: t => `rgba(167,90,247,${0.3 + t.charge * 0.5})`,
+
+    // Два такта: держишь огонь — копится заряд, полон — уходит луч.
+    step(shooter, target, wantsFire, dt){
+      if (wantsFire && shooter.cooldown <= 0){
+        // Копим. Делим на время зарядки, чтобы charge шёл ровно от 0 до 1.
+        shooter.charge += dt / CONFIG.rail.charge;
+        if (shooter.charge >= 1){
+          shooter.charge = 0;
+          fireRail(shooter, target);
+        }
+      } else {
+        // Отпустил — энергия стекает. Втрое быстрее, чем копилась:
+        // передумать дёшево, но не бесплатно.
+        shooter.charge = Math.max(0, shooter.charge - dt / CONFIG.rail.charge * 3);
+      }
+    },
+
+    stats(){
+      const r = CONFIG.rail;
+      return `Пушка <b>Рельса</b> · заряд <b>${r.charge}</b> с · ` +
+             `перезарядка <b>${r.reload}</b> с · ` +
+             `<b>${CONFIG.hp}</b> попадания до смерти`;
+    },
+
+    drawTurret(t, barrel){
+      const charge = t.charge, domeColor = t.color;
+      // Основание — казённая коробка, из которой растёт ствол.
+      ctx.fillStyle = '#3a3831';
+      ctx.fillRect(-10, -8, 24, 16);
+      ctx.strokeStyle = '#23221e';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-10, -8, 24, 16);
+
+      // Ствол-нитка: тонкая трапеция от казны к дулу.
+      const bx0 = 12;
+      ctx.fillStyle = '#2a2925';
+      ctx.beginPath();
+      ctx.moveTo(bx0, -2.2); ctx.lineTo(barrel, -1.6);
+      ctx.lineTo(barrel, 1.6); ctx.lineTo(bx0, 2.2);
+      ctx.closePath(); ctx.fill();
+
+      // Две направляющие вдоль ствола + бегущий по ним заряд.
+      for (const side of [-1, 1]){
+        ctx.strokeStyle = side < 0 ? '#6a675d' : '#413e37';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(bx0, side * 3.4);
+        ctx.lineTo(barrel - 3, side * 2.6);
+        ctx.stroke();
+
+        if (charge > 0){
+          ctx.strokeStyle = `rgba(167,90,247,${charge * 0.85})`;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(bx0, side * 3.4);
+          ctx.lineTo(bx0 + (barrel - 3 - bx0) * charge, side * (3.4 - 0.8 * charge));
+          ctx.stroke();
+        }
+      }
+
+      // Рёбра-перемычки между рельсами — фактура, не толщина.
+      ctx.fillStyle = '#4f4c44';
+      for (let i = 0; i < 6; i++){
+        const x = bx0 + 4 + i * ((barrel - bx0 - 10) / 5.5);
+        ctx.fillRect(x, -3.2, 1.6, 6.4);
+      }
+
+      // Дульный срез.
+      ctx.fillStyle = '#57544a';
+      ctx.fillRect(barrel - 4, -3.4, 4, 6.8);
+
+      // Купол башни поверх основания + люк.
+      ctx.beginPath();
+      ctx.arc(0, 0, 9.5, 0, Math.PI * 2);
+      ctx.fillStyle = domeColor;
+      ctx.fill();
+      ctx.strokeStyle = '#23221e';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(-1, 0, 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(35,34,30,.45)';
+      ctx.fill();
+    }
+  },
+
+  twins: {
+    name: 'Твинс',
+    barrel: CONFIG.twins.barrel,
+    // hudReload нет: у твинса нет перезарядки, значит нечего и показывать.
+    // Пауза между выстрелами живёт в том же cooldown, но она часть очереди,
+    // а не «оружие занято» — шкала врала бы про суть пушки.
+    lateral: t => t.barrelSide * CONFIG.twins.spread,
+    laser: () => `rgba(${CONFIG.twins.glow},.4)`,
+    shotRadius: CONFIG.twins.radius,
+
+    // Твинс кусает по четверти деления, водит стволом вчетверо слабее
+    // рельсы и НЕ срывает накопленный заряд. Дистанция ни на что не влияет.
+    hit(){
+      const cfg = CONFIG.twins;
+      return { damage: cfg.damage, aimKick: cfg.aimKick, breakCharge: false };
+    },
+
+    /* Шарик: короткий след по вектору скорости, мягкий ореол и почти
+       белое ядро. След не храним отдельно — он считается из скорости,
+       поэтому лишнего состояния нет.                                 */
+    drawShot(b){
+      const cfg = CONFIG.twins;
+      const R = cfg.radius;
+
+      ctx.strokeStyle = `rgba(${cfg.glow},.3)`;
+      ctx.lineWidth = R * 1.6;
+      ctx.beginPath();
+      ctx.moveTo(b.x - b.vx * 0.035, b.y - b.vy * 0.035);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+
+      const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, R * 3);
+      g.addColorStop(0, `rgba(${cfg.glow},.5)`);
+      g.addColorStop(1, `rgba(${cfg.glow},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(b.x, b.y, R * 3, 0, Math.PI * 2); ctx.fill();
+
+      ctx.fillStyle = cfg.color;
+      ctx.beginPath(); ctx.arc(b.x, b.y, R, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,240,235,.85)';
+      ctx.beginPath(); ctx.arc(b.x, b.y, R * 0.45, 0, Math.PI * 2); ctx.fill();
+    },
+
+    // Один такт: пришёл черёд — вылетел шарик, очередь ушла второму дулу.
+    // Ни накопления, ни перезарядки: держишь пробел — стреляет.
+    step(shooter, target, wantsFire, dt){
+      if (wantsFire && shooter.cooldown <= 0){
+        firePlasma(shooter, target);
+        shooter.cooldown = CONFIG.twins.interval;
+      }
+    },
+
+    stats(){
+      const w = CONFIG.twins;
+      return `Пушка <b>Твинс</b> · очередь из двух дул по <b>${w.interval}</b> с · ` +
+             `без перезарядки · шарик <b>${w.speed}</b> px/с · ` +
+             `<b>${Math.round(CONFIG.hp / w.damage)}</b> попаданий до смерти`;
+    },
+
+    /* Силуэт твинса держится на двух вещах: ШИРОКАЯ плоская коробка
+       башни и ДВА дула, разнесённые от оси. Рисуем дула первыми, чтобы
+       коробка перекрыла их казённую часть — тогда они выглядят
+       вставленными в башню, а не приклеенными снаружи.               */
+    drawTurret(t, barrel){
+      const cfg = CONFIG.twins;
+      const bx0 = 2;                          // где дуло выходит из башни
+      // Полутолщина дула. Держим её меньше разноса: между дулами должна
+      // оставаться ЩЕЛЬ, иначе пара сливается в один широкий брусок и
+      // весь смысл силуэта пропадает.
+      const bh  = 2.8;
+
+      // Дульный блок и рёбра считаются ОТ длины дула, а не фиксированными
+      // числами: правишь barrel в CONFIG — рисунок едет следом, а не
+      // вылезает за срез.
+      const mz   = 4;                         // длина дульного блока
+      const rib0 = 9, rib1 = barrel - mz - 2; // участок под рёбра
+      const ribs = Math.max(0, Math.floor((rib1 - rib0) / 5));
+
+      for (const side of [-1, 1]){
+        const y = side * cfg.spread;
+
+        // Тело дула. Светлее корпуса башни — иначе на тёмной обводке
+        // дула сливаются в одно пятно и пушка читается как однострволка.
+        ctx.fillStyle = '#4d4a42';
+        ctx.fillRect(bx0, y - bh, barrel - bx0, bh * 2);
+        ctx.strokeStyle = '#23221e';
+        ctx.lineWidth = 1.6;
+        ctx.strokeRect(bx0, y - bh, barrel - bx0, bh * 2);
+
+        ctx.fillStyle = '#2f2d28';             // рёбра охлаждения поперёк
+        for (let i = 0; i < ribs; i++)
+          ctx.fillRect(rib0 + i * ((rib1 - rib0) / ribs), y - bh, 1.8, bh * 2);
+
+        ctx.fillStyle = '#6a675d';             // дульный блок
+        ctx.fillRect(barrel - mz, y - bh - 1, mz, bh * 2 + 2);
+        ctx.strokeStyle = '#23221e';
+        ctx.lineWidth = 1.6;
+        ctx.strokeRect(barrel - mz, y - bh - 1, mz, bh * 2 + 2);
+      }
+
+      // Коробка башни. Ниже и короче рельсовой казны, зато шире: у
+      // рельсы силуэт держится на длинном стволе, у твинса — на паре.
+      // Специально не закрывает корпус целиком, иначе не видно машину.
+      ctx.fillStyle = t.color;
+      ctx.fillRect(-10, -10, 17, 20);
+      ctx.strokeStyle = '#23221e';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-10, -10, 17, 20);
+
+      // Тёмная плита на корме башни — сразу видно, где перед.
+      ctx.fillStyle = 'rgba(35,34,30,.4)';
+      ctx.fillRect(-10, -7, 4, 14);
+
+      // Плазменное окно по центру. Оно светится цветом СНАРЯДА, а не
+      // краской стороны: по нему на глаз отличаешь твинс от рельсы,
+      // даже когда танк стоит носом к тебе.
+      ctx.fillStyle = `rgba(${cfg.glow},.9)`;
+      ctx.beginPath(); ctx.arc(-1, 0, 3.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,240,235,.8)';
+      ctx.beginPath(); ctx.arc(-1, 0, 1.4, 0, Math.PI * 2); ctx.fill();
+    }
+  },
+
+  smoky: {
+    name: 'Смоки',
+    barrel: CONFIG.smoky.barrel,
+    hudReload: CONFIG.smoky.reload,     // перезарядка есть — шкала нужна
+    lateral: () => 0,                   // ствол один, он же ось
+    laser: () => `rgba(${CONFIG.smoky.flame},.42)`,
+    shotRadius: CONFIG.smoky.radius,
+
+    // Накопления нет: нажал — выстрелил, дальше ждёшь перезарядку.
+    step(shooter, target, wantsFire, dt){
+      if (wantsFire && shooter.cooldown <= 0){
+        fireShell(shooter, target);
+        shooter.cooldown = CONFIG.smoky.reload;
+      }
+    },
+
+    /* Урон смоки — единственный в игре, что зависит от ДИСТАНЦИИ.
+       Считаем по пути, который снаряд реально пролетел от дула, а не по
+       расстоянию между танками сейчас: цель могла сдвинуться, пока
+       болванка летела, и честно тут именно пройденный путь.
+       Крит бросается отдельно и от дистанции не зависит.             */
+    hit(b){
+      const cfg = CONFIG.smoky;
+      const flown = Math.hypot(b.x - b.ox, b.y - b.oy);
+      const k = clamp((flown - cfg.falloffFrom) /
+                      (cfg.falloffTo - cfg.falloffFrom), 0, 1);
+      const crit = Math.random() < cfg.critChance;
+
+      let damage = cfg.damage + (cfg.damageFar - cfg.damage) * k;
+      if (crit) damage *= cfg.critMult;
+
+      return { damage, aimKick: cfg.aimKick, breakCharge: true, crit };
+    },
+
+    stats(){
+      const c = CONFIG.smoky;
+      const near = Math.ceil(CONFIG.hp / c.damage);
+      const far  = Math.ceil(CONFIG.hp / c.damageFar);
+      return `Пушка <b>Смоки</b> · перезарядка <b>${c.reload}</b> с · ` +
+             `без накопления · снаряд <b>${c.speed}</b> px/с<br>` +
+             `<b>${near}</b> выстрела в упор, <b>${far}</b> с конца карты · ` +
+             `крит <b>${Math.round(c.critChance * 100)}%</b>, урон ×${c.critMult}`;
+    },
+
+    /* Силуэт: ОДИН толстый короткий ствол с утолщением на срезе.
+       Рельса — тонкая и длинная, твинс — пара коротких, смоки —
+       мясистая одиночка. Различать надо с одного взгляда в бою.     */
+    drawTurret(t, barrel){
+      // Полутолщина ствола. У рельсы 2.2 у казны — держим 2.0, то есть
+      // чуть тоньше. Смоки и рельса — оружие одного калибра по виду,
+      // различает их ДЛИНА ствола, а не его мясистость.
+      const bh = 2.0;
+      const bx0 = 3;
+
+      ctx.fillStyle = '#3f3c35';             // тело ствола
+      ctx.fillRect(bx0, -bh, barrel - bx0, bh * 2);
+      ctx.strokeStyle = '#23221e';
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(bx0, -bh, barrel - bx0, bh * 2);
+
+      ctx.fillStyle = '#5d5a51';             // бандаж — фактура, не толщина
+      ctx.fillRect(barrel - 11, -bh - 0.8, 2, (bh + 0.8) * 2);
+
+      const mh = bh + 1.4;                   // дульный тормоз — лёгкое утолщение
+      ctx.fillStyle = '#6a675d';
+      ctx.fillRect(barrel - 4, -mh, 4, mh * 2);
+      ctx.strokeRect(barrel - 4, -mh, 4, mh * 2);
+
+      // Башня: узкая коробка. Ствол тонкий и короткий, поэтому силуэт
+      // машины держит именно она.
+      ctx.fillStyle = t.color;
+      ctx.fillRect(-10, -8, 16, 16);
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-10, -8, 16, 16);
+
+      ctx.fillStyle = 'rgba(35,34,30,.4)';   // плита на корме
+      ctx.fillRect(-10, -5.5, 3.5, 11);
+
+      ctx.beginPath();                       // люк
+      ctx.arc(-2, 0, 3.4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(35,34,30,.45)';
+      ctx.fill();
+    },
+
+    /* Снаряд: болванка с маленьким хвостом пламени СЗАДИ. Хвост тут не
+       украшение — без него снаряд читается как приклеенная к экрану
+       точка, а с ним видно, что он летит и куда.                     */
+    drawShot(b){
+      const cfg = CONFIG.smoky;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(Math.atan2(b.vy, b.vx));
+
+      // Хвост держим тоньше калибра: болванка не может быть шире дула,
+      // из которого вылетела.
+      const g = ctx.createLinearGradient(-18, 0, -4, 0);
+      g.addColorStop(0,   `rgba(${cfg.flame},0)`);
+      g.addColorStop(0.55,`rgba(${cfg.flame},.45)`);
+      g.addColorStop(1,   `rgba(255,236,190,.95)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(-18, 0); ctx.lineTo(-4, -2.2); ctx.lineTo(-4, 2.2);
+      ctx.closePath(); ctx.fill();
+
+      // Тело: прямые бока и скруглённый нос — форма пули.
+      ctx.fillStyle = cfg.color;
+      ctx.beginPath();
+      ctx.moveTo(-5, -2.2); ctx.lineTo(1.5, -2.2);
+      ctx.quadraticCurveTo(5.5, 0, 1.5, 2.2);
+      ctx.lineTo(-5, 2.2);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#23221e';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Блик по верхней грани — болванка перестаёт быть плоским пятном.
+      ctx.fillStyle = 'rgba(255,245,220,.4)';
+      ctx.fillRect(-4, -1.8, 5, 1);
+
+      ctx.restore();
+    }
+  }
+};
+
+function drawTank(t, isPlayer, preview = false){
   if (!t.alive){
     // Пятно на месте уничтоженного танка.
     ctx.fillStyle = 'rgba(35,34,30,.22)';
@@ -883,7 +1515,6 @@ function drawTank(t, isPlayer){
     return;
   }
 
-  const r = t.radius;
   const L = t.hull.len, W = t.hull.wid;        // длина и ширина корпуса
   const hl = L / 2, hw = W / 2;                // половины — от центра танка
 
@@ -945,7 +1576,7 @@ function drawTank(t, isPlayer){
     }
   }
 
-  ctx.fillStyle = t.hull.color;                // сам корпус
+  ctx.fillStyle = t.color;                     // сам корпус (краска стороны)
   hullPath(); ctx.fill();
   ctx.strokeStyle = '#23221e';
   ctx.lineWidth = 2;
@@ -964,84 +1595,23 @@ function drawTank(t, isPlayer){
   // --- башня с рельсой ---
   // Свой поворот И своя точка опоры: у Васпа она сдвинута к корме.
   const piv = turretPivot(t);
-  const barrel = t.hull.barrel;
+  const barrel = barrelLen(t);
 
   ctx.save();
   ctx.translate(piv.x, piv.y);
   ctx.rotate(t.aimAngle);
-
-  // Основание — казённая коробка, из которой растёт ствол.
-  // Она остаётся массивной: контраст «толстая казна — тонкий ствол»
-  // и делает силуэт рельсы узнаваемым.
-  ctx.fillStyle = '#3a3831';
-  ctx.fillRect(-10, -8, 24, 16);
-  ctx.strokeStyle = '#23221e';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(-10, -8, 24, 16);
-
-  /* Ствол. Рельсотрон — это буквально ДВЕ параллельные направляющие,
-     между которыми разгоняется снаряд. Раньше я лепил поперёк ствола
-     толстые катушки, и он выглядел как бревно. Теперь текстура идёт
-     ВДОЛЬ: две тонкие рельсы плюс мелкие рёбра между ними.
-     Сам ствол при этом почти нитка — 4 пикселя у казны, 3 у дула. */
-  const bx0 = 12;                              // где начинается ствол
-  ctx.fillStyle = '#2a2925';
-  ctx.beginPath();
-  ctx.moveTo(bx0, -2.2); ctx.lineTo(barrel, -1.6);
-  ctx.lineTo(barrel, 1.6); ctx.lineTo(bx0, 2.2);
-  ctx.closePath(); ctx.fill();
-
-  // Две направляющие вдоль ствола — та самая «рельсовость».
-  for (const side of [-1, 1]){
-    ctx.strokeStyle = side < 0 ? '#6a675d' : '#413e37';  // верхняя светлее
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(bx0, side * 3.4);
-    ctx.lineTo(barrel - 3, side * 2.6);
-    ctx.stroke();
-
-    // Заряд бежит по направляющим от казны к дулу.
-    if (t.charge > 0){
-      ctx.strokeStyle = `rgba(167,90,247,${t.charge * 0.85})`;
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(bx0, side * 3.4);
-      ctx.lineTo(bx0 + (barrel - 3 - bx0) * t.charge, side * (3.4 - 0.8 * t.charge));
-      ctx.stroke();
-    }
-  }
-
-  // Мелкие рёбра-перемычки между рельсами. Маленькие: они дают
-  // фактуру, а не толщину.
-  ctx.fillStyle = '#4f4c44';
-  for (let i = 0; i < 6; i++){
-    const x = bx0 + 4 + i * ((barrel - bx0 - 10) / 5.5);
-    ctx.fillRect(x, -3.2, 1.6, 6.4);
-  }
-
-  // Дульный срез — короткий и узкий.
-  ctx.fillStyle = '#57544a';
-  ctx.fillRect(barrel - 4, -3.4, 4, 6.8);
-
-  // Купол башни поверх основания.
-  ctx.beginPath();
-  ctx.arc(0, 0, 9.5, 0, Math.PI * 2);
-  ctx.fillStyle = t.hull.color;
-  ctx.fill();
-  ctx.strokeStyle = '#23221e';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  // Люк — маленькая деталь, но силуэт сразу перестаёт быть «фигуркой».
-  ctx.beginPath();
-  ctx.arc(-1, 0, 4, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(35,34,30,.45)';
-  ctx.fill();
+  // Рисунок башни/ствола — из реестра пушек. drawTank не знает, какая
+  // пушка стоит: добавится новая — этот вызов не меняется.
+  TURRETS[t.weapon].drawTurret(t, barrel);
   ctx.restore();
 
   // --- накопление энергии у дула ---
   // Сгусток растёт вместе с charge и пульсирует. Это честное
   // предупреждение противнику: видишь фиолетовый шар — уходи с линии.
-  if (t.charge > 0){
+  // Рисуем только тем, кто вообще копит: иначе чужой эффект прилипнет
+  // к пушке, у которой накопления нет (так и вылезал сгусток у твинса
+  // в гараже — там charge крутится для показа).
+  if (TURRETS[t.weapon].charges && t.charge > 0){
     const m = muzzle(t);
     const c = t.charge;
     // Лёгкая пульсация: синус от времени. Чем полнее заряд, тем чаще.
@@ -1076,8 +1646,10 @@ function drawTank(t, isPlayer){
   // --- лазерный прицел ---
   // Только у игрока. Именно по нему видно, как попадание сбивает наводку.
   // Идёт строго от дула — то есть с учётом того, что башня сдвинута.
-  if (isPlayer){
-    const m = muzzle(t);
+  // У твинса нить идёт из ТОГО дула, что выстрелит следующим, — по ней
+  // видно, куда ляжет очередной шарик, и заодно видно саму очерёдность.
+  if (isPlayer && !preview){
+    const m = muzzle(t, TURRETS[t.weapon].lateral(t));
     const dirX = Math.cos(t.aimAngle), dirY = Math.sin(t.aimAngle);
     let len = CONFIG.rail.range;
     for (let d = 0; d < CONFIG.rail.range; d += 5){
@@ -1085,8 +1657,8 @@ function drawTank(t, isPlayer){
       if (px < 0 || py < 0 || px > CONFIG.world.w || py > CONFIG.world.h ||
           OBSTACLES.some(o => pointInRect(px, py, o))){ len = d; break; }
     }
-    // Нить прицела разгорается по мере накопления заряда.
-    ctx.strokeStyle = `rgba(167,90,247,${0.3 + t.charge * 0.5})`;
+    // Цвет нити задаёт пушка: у рельсы он разгорается вместе с зарядом.
+    ctx.strokeStyle = TURRETS[t.weapon].laser(t);
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(m.x, m.y);
@@ -1095,22 +1667,57 @@ function drawTank(t, isPlayer){
   }
 
   // --- полоски здоровья над танком ---
+  // Деления заполняются ДРОБНО. Рельса снимает деление целиком, а твинс
+  // грызёт по четверти — при заливке «всё или ничего» полоска стояла бы
+  // неподвижно три попадания подряд и врала бы про состояние боя.
   const pipW = 13, gap = 3;
   const total = CONFIG.hp * pipW + (CONFIG.hp - 1) * gap;
-  for (let i = 0; i < CONFIG.hp; i++){
-    ctx.fillStyle = i < t.hp ? (isPlayer ? '#3d6e8c' : '#b04a33') : 'rgba(35,34,30,.22)';
-    ctx.fillRect(t.x - total / 2 + i * (pipW + gap), t.y - hl - 14, pipW, 4);
+  if (!preview) for (let i = 0; i < CONFIG.hp; i++){
+    const x = t.x - total / 2 + i * (pipW + gap);
+    const fill = clamp(t.hp - i, 0, 1);
+    ctx.fillStyle = 'rgba(35,34,30,.22)';
+    ctx.fillRect(x, t.y - hl - 14, pipW, 4);
+    if (fill > 0){
+      ctx.fillStyle = isPlayer ? '#3d6e8c' : '#b04a33';
+      ctx.fillRect(x, t.y - hl - 14, pipW * fill, 4);
+    }
   }
 
   // --- шкала перезарядки ---
-  // Пустая шкала = рельса готова. Пока ползёт — выстрелить нельзя.
-  if (t.cooldown > 0){
-    const w = 30 * (t.cooldown / CONFIG.rail.reload);
+  // Пустая шкала = пушка готова. Есть только у тех, у кого перезарядка
+  // вообще есть: у твинса её нет, и шкалы нет — иначе она врала бы,
+  // выдавая паузу очереди за «оружие занято».
+  const hudReload = TURRETS[t.weapon].hudReload;
+  if (!preview && hudReload && t.cooldown > 0){
+    const w = 30 * (t.cooldown / hudReload);
     ctx.fillStyle = 'rgba(35,34,30,.18)';
     ctx.fillRect(t.x - 15, t.y + hl + 8, 30, 3);
     ctx.fillStyle = '#e8c547';
-    ctx.fillRect(t.x - 15, t.y + r + 9, w, 3);
+    ctx.fillRect(t.x - 15, t.y + hl + 8, w, 3);
   }
+}
+
+/* Снаряды в полёте и дымки у дул. Как выглядит снаряд, знает пушка —
+   здесь только порядок слоёв: дым под снарядами, иначе свежее облачко
+   накрывает собственную болванку.                                    */
+function drawShots(){
+  for (const p of puffs){
+    // Облачко расходится и бледнеет: два приёма сразу, иначе дым
+    // выглядит выключенной лампочкой, а не рассеивающимся. Заливаем
+    // градиентом, а не сплошным кругом — сплошной читается как шар.
+    const a = p.life;
+    const rad = p.r * (1 + (1 - a) * 2.4);
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
+    g.addColorStop(0,   `rgba(158,153,140,${a * 0.62})`);
+    g.addColorStop(0.6, `rgba(138,133,121,${a * 0.32})`);
+    g.addColorStop(1,   'rgba(124,119,108,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.lineCap = 'round';
+  for (const b of shots) TURRETS[b.weapon].drawShot(b);
+  ctx.lineCap = 'butt';                 // общее состояние ctx — вернуть как было
 }
 
 /* След от выстрела. Испарение сделано двумя приёмами сразу:
@@ -1272,17 +1879,31 @@ const titleEl  = document.getElementById('title');
 const subEl    = document.getElementById('subtitle');
 const scorePEl = document.getElementById('scoreP');
 const scoreBEl = document.getElementById('scoreB');
+const playerLabel = document.getElementById('playerLabel');
+
+// Экипировка игрока, выбранная в гараже. Бот всегда Васп.
+const LOADOUT = { hull: 'hornet', turret: 'railgun' };
+// Краска задаётся СТОРОНОЙ, а не корпусом: иначе игрок на Васпе слился
+// бы с ботом-Васпом. Сталь — игрок, ржавчина — бот.
+const SIDE_COLOR = { player: '#3d6e8c', bot: '#b04a33' };
 
 function newMatch(){
-  player = new Tank('hornet',  70, 530, -Math.PI / 4);
-  bot    = new Tank('wasp',   830,  70,  Math.PI * 0.75);
+  player = new Tank(LOADOUT.hull, 70, 530, -Math.PI / 4);
+  bot    = new Tank('wasp',      830,  70,  Math.PI * 0.75);
+  player.weapon = LOADOUT.turret;
+  player.color  = SIDE_COLOR.player;
+  bot.color     = SIDE_COLOR.bot;
   // Башня бота крутится медленнее твоей — это его главная слабость.
   // Обходи его по дуге, и он не будет успевать за тобой стволом.
   bot.turretSpeed = CONFIG.bot.turretTurn;
   beams.length = 0;
   hitMarks.length = 0;
+  shots.length = 0;
+  puffs.length = 0;
   resetFlags();
   scorePEl.textContent = scoreBEl.textContent = '0';
+  // Шапка показывает выбранный корпус игрока.
+  playerLabel.textContent = `${CONFIG.hulls[LOADOUT.hull].name} · ты`;
 }
 
 function tick(now){
@@ -1317,7 +1938,12 @@ function tick(now){
   updateWeapon(player, bot, wantsFire, dt);
   updateWeapon(bot, player, cmd.fire, dt);
 
-  // --- 4.5. Правила режима ---
+  // --- 4.5. Летящие снаряды ---
+  // Идут ПОСЛЕ выстрелов и после движения танков: иначе свежий снаряд
+  // проходил бы полкадра пути ещё до того, как цель успела сдвинуться.
+  updateShots(dt);
+
+  // --- 4.6. Правила режима ---
   updateCTF(dt, { player, bot });
 
   // --- 5. Гасим старые лучи и метки ---
@@ -1340,6 +1966,7 @@ function tick(now){
   drawBeams();
   drawTank(bot, false);
   drawTank(player, true);
+  drawShots();           // снаряды над танками — по ним читается бой
   drawHitMarks();        // метки поверх всего — их нельзя пропустить
 
   // --- 7. Счёт и конец матча ---
@@ -1414,6 +2041,110 @@ targetInput.addEventListener('input', () => {
 });
 
 startBtn.addEventListener('click', startMatch);
+
+/* --- Гараж: примерочная. Показывает ТВОЙ танк с выбранным корпусом и
+   пушкой; выбор запоминается в LOADOUT и уезжает в бой. --- */
+const garageEl    = document.getElementById('garage');
+const garageBtn   = document.getElementById('garageBtn');
+const garageDone  = document.getElementById('garageDone');
+const garageStats = document.getElementById('garageStats');
+
+let inGarage = false, previewTank = null;
+let gAngle = 0, gCharge = 0, gChargeDir = 1, gLast = 0;
+
+// Справка по выбранному железу. Числа тянем из CONFIG/TURRETS, чтобы
+// гараж не разъезжался с игрой.
+function renderGarageStats(){
+  const h = CONFIG.hulls[LOADOUT.hull];
+  // Строку про пушку пишет сама пушка: у рельсы и твинса важны РАЗНЫЕ
+  // числа, и общий шаблон на двоих врал бы про обе.
+  garageStats.innerHTML =
+    `Корпус <b>${h.name}</b> · скорость <b>${h.speed}</b> · ` +
+    `поворот <b>${h.turn}</b> рад/с · хитбокс <b>${h.radius}</b><br>` +
+    TURRETS[LOADOUT.turret].stats();
+}
+
+function syncPicks(){
+  document.querySelectorAll('.gpick').forEach(b =>
+    b.classList.toggle('is-on', b.dataset.hull === LOADOUT.hull));
+  document.querySelectorAll('.tpick').forEach(b =>
+    b.classList.toggle('is-on', b.dataset.turret === LOADOUT.turret));
+  renderGarageStats();
+}
+
+function openGarage(){
+  running = false;                       // боевой цикл не крутится
+  inGarage = true;
+  overlay.classList.add('hidden');
+  garageEl.classList.remove('hidden');
+  previewTank = null;
+  syncPicks();
+  gLast = performance.now();
+  requestAnimationFrame(garageFrame);
+}
+
+function closeGarage(){
+  inGarage = false;
+  garageEl.classList.add('hidden');
+  overlay.classList.remove('hidden');
+  // Пересобираем арену с уже экипированным игроком и обновляем шапку.
+  newMatch();
+  drawFloor(); drawObstacles(); drawCTF();
+  drawTank(bot, false); drawTank(player, true);
+}
+
+// Тень-подставка под танк, чтобы он «стоял», а не висел в пустоте.
+function drawGarageStand(cx, cy){
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(1, 0.42);
+  const g = ctx.createRadialGradient(0, 0, 4, 0, 0, 64);
+  g.addColorStop(0, 'rgba(35,34,30,.30)');
+  g.addColorStop(1, 'rgba(35,34,30,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, 64, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function garageFrame(now){
+  if (!inGarage) return;
+  const dt = Math.min((now - gLast) / 1000, 0.05);
+  gLast = now;
+
+  // Корпус медленно вращается — видно форму со всех сторон. Заряд
+  // плавно набирается и стекает: заодно показываем «готовый» ствол.
+  gAngle  += dt * 0.5;
+  gCharge += gChargeDir * dt * 0.35;
+  if (gCharge >= 1){ gCharge = 1; gChargeDir = -1; }
+  if (gCharge <= 0){ gCharge = 0; gChargeDir =  1; }
+
+  const cx = CONFIG.world.w / 2, cy = CONFIG.world.h / 2;
+
+  // Пересобираем болванку только при смене корпуса.
+  if (!previewTank || previewTank.hull !== CONFIG.hulls[LOADOUT.hull]){
+    previewTank = new Tank(LOADOUT.hull, cx, cy, 0);
+    previewTank.color = SIDE_COLOR.player;    // это ТВОЙ танк — сталь
+  }
+  previewTank.x = cx; previewTank.y = cy;
+  previewTank.bodyAngle   = gAngle;
+  previewTank.turretAngle = gAngle;           // башня смотрит вперёд
+  // Заряд крутим только тем пушкам, которые вообще копят.
+  previewTank.charge      = TURRETS[LOADOUT.turret].charges ? gCharge : 0;
+  previewTank.weapon      = LOADOUT.turret;
+
+  drawFloor();
+  drawGarageStand(cx, cy + 6);
+  drawTank(previewTank, true, true);          // preview=true: без HUD и лазера
+
+  requestAnimationFrame(garageFrame);
+}
+
+garageBtn.addEventListener('click', openGarage);
+garageDone.addEventListener('click', closeGarage);
+document.querySelectorAll('.gpick').forEach(b =>
+  b.addEventListener('click', () => { LOADOUT.hull = b.dataset.hull; syncPicks(); }));
+document.querySelectorAll('.tpick').forEach(b =>
+  b.addEventListener('click', () => { LOADOUT.turret = b.dataset.turret; syncPicks(); }));
 
 // Версия берётся из одной константы наверху — так номер на экране
 // и номер в истории изменений не разъедутся.
