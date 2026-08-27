@@ -1,6 +1,7 @@
 # Гараж
 
-Склад **спецификаций** для корпусов (`hulls/`) и пушек (`turrets/`). Здесь
+Склад **спецификаций** для корпусов (`hulls/`), пушек (`turrets/`) и
+карт (`maps/`). Здесь
 Markdown, а не код: игра — один HTML-файл, и её игровые числа живут в `CONFIG`
 внутри него. Гараж описывает сущности и их происхождение из оригинального
 Tanki Online, чтобы было от чего отталкиваться при адаптации баланса.
@@ -26,5 +27,11 @@ Tanki Online, чтобы было от чего отталкиваться пр�
 | `turrets/railgun/railgun.md` | Рельса | `CONFIG.rail` |
 | `turrets/twins/twins.md` | Твинс | `CONFIG.twins` |
 | `turrets/smoky/smoky.md` | Смоки | `CONFIG.smoky` |
+| `turrets/flamethrower/flamethrower.md` | Огнемёт | `CONFIG.flame` |
+| `turrets/isida/isida.md` | Изида | `CONFIG.isida` |
+| `turrets/freeze/freeze.md` | Фриз | `CONFIG.freeze` |
+| `maps/boombox.md` | Карта Boombox | `MAPS.boombox` |
+| `maps/sandbox.md` | Карта Sandbox | `MAPS.sandbox` |
+| `maps/format.md` | Из чего собраны карты и редактор | `PROPS`, `MAPS` |
 
 Правишь число в `CONFIG` — правишь и карточку. Разошлись — карточка врёт.
