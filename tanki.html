@@ -268,6 +268,7 @@
             <div class="picks">
               <button class="mode gpick is-on" data-hull="hornet">Хорнет</button>
               <button class="mode gpick" data-hull="wasp">Васп</button>
+              <button class="mode gpick" data-hull="viking">Викинг</button>
             </div>
           </div>
           <div class="garage-group">
@@ -306,6 +307,12 @@
    ИСТОРИЯ ИЗМЕНЕНИЙ
    -----------------
    0.10 (в работе)
+        Третий корпус — Викинг, первый средний: здоровье 4 против двух
+        у лёгких, но крупнее и медленнее. Здоровье переехало в корпус,
+        полоска показывает столько делений, сколько он держит.
+        Все три корпуса обросли деталями по оригинальным картинкам:
+        гусеницы отличают их раньше формы, у Васпа и Викинга понтоны
+        выходят вперёд «ножками».
         Карта стала данными: список предметов (PROPS) — стены, дома,
         деревья, кусты, лужи, трубы, столбы, остовы, вышки, мосты.
         Редактор карт — для правки готовых карт и сохранения файлом:
@@ -470,7 +477,29 @@ const CONFIG = {
     // ломается баланс, ведь широкий танк просто крупнее как мишень.
     wasp:   { speed: 124, turn: 1.4, radius: 16, len: 46, wid: 26,
               shape: 'notched', turretBack: 9, barrel: 46,
-              color: '#b04a33', name: 'Васп'   }
+              color: '#b04a33', name: 'Васп'   },
+
+    /* Викинг — первый СРЕДНИЙ корпус. Он не «третий лёгкий с другими
+       числами», а другой класс: вдвое больше здоровья ценой скорости и
+       габарита. Отсюда и всё остальное:
+
+         hp 4      — ровно вдвое против лёгких. Хорнет это половина
+                     Викинга, и по нему теперь меряется вся живучесть.
+         54 x 38   — широкий и приземистый, ближе к квадрату, чем лёгкие.
+                     Он и мишень крупнее: вдвое больше здоровья не должно
+                     доставаться даром.
+         radius 21 — хитбокс по ТЕЛУ, а не по понтонам: иначе попадания
+                     засчитывались бы по воздуху рядом с гусеницами.
+         92 / 1.25 — медленнее и неповоротливее обоих лёгких, но это
+                     средний корпус, а не тяжёлый: разница чувствуется,
+                     а ездить не мешает.
+
+       Овердрайва «Берсерк» из оригинала у него НЕТ и не будет: овердрайвы
+       в эту игру не переносим. Корпус отличается только числами и
+       силуэтом.                                                       */
+    viking: { speed: 92,  turn: 1.25, radius: 21, len: 54, wid: 38,
+              shape: 'sloped',  turretBack: 3, barrel: 46, hp: 4,
+              color: '#4a6b4a', name: 'Викинг' }
   },
 
   rail: {
@@ -718,7 +747,11 @@ const CONFIG = {
     standoff: 90        // снизу вверх бьём, отъехав не меньше этого от обрыва
   },
 
-  hp: 2,                // сколько попаданий держит танк
+  // Здоровье по умолчанию: столько держит корпус, который своего числа
+  // не задал (оба лёгких). У Викинга своё — 4. Это же число остаётся
+  // мерой всего баланса: «два попадания рельсы» отмерены по лёгкому
+  // корпусу, а тяжёлый живёт ровно вдвое дольше.
+  hp: 2,                // сколько попаданий держит лёгкий корпус
 
   // Порог смерти. НЕ ноль: урон бывает дробным и непрерывным (твинс по
   // 0.25, огнемёт долями кадра), и на сложении таких кусков остаётся
@@ -1567,7 +1600,7 @@ class Tank {
     this.bodyAngle = angle;          // куда смотрит корпус
     this.turretAngle = angle;        // куда смотрит рельса
 
-    this.hp = CONFIG.hp;
+    this.hp = this.maxHp;
     this.cooldown = 0;               // сколько секунд до следующего выстрела
     this.charge = 0;                 // накопленная энергия рельсы, 0..1
     this.turretSpeed = CONFIG.rail.turretTurn;  // у бота будет своя, медленнее
@@ -1620,6 +1653,10 @@ class Tank {
 
   get alive(){ return this.deadTimer <= 0; }
   get radius(){ return this.hull.radius; }
+  /* Сколько держит ЭТОТ корпус. Число живёт в корпусе, а не в CONFIG:
+     Викинг вдвое живучее лёгких, и полоска здоровья, лечение изиды и
+     подписи в гараже спрашивают именно корпус.                       */
+  get maxHp(){ return this.hull.hp || CONFIG.hp; }
 
   /* Краска, которой танк рисуется ПРЯМО СЕЙЧАС. Обычно это цвет стороны,
      но промёрзшая машина уходит в лёд — и это единственная индикация
@@ -1853,7 +1890,7 @@ class Tank {
     this.x = this.spawnX;
     this.y = this.spawnY;
     this.bodyAngle = this.turretAngle = this.spawnAngle;
-    this.hp = CONFIG.hp;
+    this.hp = this.maxHp;
     this.cooldown = 0;
     this.charge = 0;
     this.aimKick = 0;
@@ -2122,6 +2159,14 @@ function tankAt(px, py, shooter, extra = 0){
    одна строка здесь, а не пушка.                                     */
 function allied(a, b){
   return a !== b && a.team !== null && a.team === b.team;
+}
+
+/* Сколько держит корпус, выбранный в гараже. Подписи пушек считают время
+   до смерти по НЕМУ: с Викингом «два попадания рельсы» превращаются в
+   четыре, и подпись обязана это показывать, а не врать про лёгкий.   */
+function loadoutHp(){
+  const h = CONFIG.hulls[LOADOUT.hull];
+  return (h && h.hp) || CONFIG.hp;
 }
 
 /* Один шаг работы орудия.
@@ -3125,7 +3170,7 @@ const TURRETS = {
       const r = CONFIG.rail;
       return `Пушка <b>Рельса</b> · заряд <b>${r.charge}</b> с · ` +
              `перезарядка <b>${r.reload}</b> с · ` +
-             `<b>${CONFIG.hp}</b> попадания до смерти`;
+             `<b>${loadoutHp()}</b> попадания до смерти`;
     },
 
     drawTurret(t, barrel){
@@ -3247,7 +3292,7 @@ const TURRETS = {
       const w = CONFIG.twins;
       return `Пушка <b>Твинс</b> · очередь из двух дул по <b>${w.interval}</b> с · ` +
              `без перезарядки · шарик <b>${w.speed}</b> px/с · ` +
-             `<b>${Math.round(CONFIG.hp / w.damage)}</b> попаданий до смерти`;
+             `<b>${Math.round(loadoutHp() / w.damage)}</b> попаданий до смерти`;
     },
 
     /* Силуэт твинса держится на двух вещах: ШИРОКАЯ плоская коробка
@@ -3351,8 +3396,8 @@ const TURRETS = {
 
     stats(){
       const c = CONFIG.smoky;
-      const near = Math.ceil(CONFIG.hp / c.damage);
-      const far  = Math.ceil(CONFIG.hp / c.damageFar);
+      const near = Math.ceil(loadoutHp() / c.damage);
+      const far  = Math.ceil(loadoutHp() / c.damageFar);
       return `Пушка <b>Смоки</b> · перезарядка <b>${c.reload}</b> с · ` +
              `без накопления · снаряд <b>${c.speed}</b> px/с<br>` +
              `<b>${near}</b> выстрела в упор, <b>${far}</b> с конца карты · ` +
@@ -3494,7 +3539,7 @@ const TURRETS = {
       const c = CONFIG.flame;
       return `Пушка <b>Огнемёт</b> · дальность <b>${c.range}</b> px, ближний бой<br>` +
              `баллон <b>${c.tank}</b> с огня, восполняется за <b>${c.refill}</b> с · ` +
-             `<b>${Math.round(CONFIG.hp / c.dps)}</b> с в упор до смерти · ` +
+             `<b>${Math.round(loadoutHp() / c.dps)}</b> с в упор до смерти · ` +
              `догорание <b>${c.burnTime}</b> с`;
     },
 
@@ -3604,7 +3649,7 @@ const TURRETS = {
       // Своих лечим той же скоростью, какой чужих плавим, и тем же
       // разгоном. Выше полного здоровья не наливаем: перелечить нельзя.
       if (lock.heal){
-        target.hp = Math.min(CONFIG.hp, target.hp + cfg.heal * mult * dt);
+        target.hp = Math.min(target.maxHp, target.hp + cfg.heal * mult * dt);
         return;
       }
 
@@ -3624,7 +3669,7 @@ const TURRETS = {
       // Время до смерти СЧИТАЕМ тем же законом, что и стреляем: разгон
       // делает его нелинейным, и записанное числом оно соврало бы при
       // первой же правке rampTime/rampMax.
-      let hp = CONFIG.hp, t = 0;
+      let hp = loadoutHp(), t = 0;
       while (hp > CONFIG.hpEpsilon && t < 60){
         hp -= c.dps * isidaMult(t) / 60;
         t += 1 / 60;
@@ -3790,7 +3835,7 @@ const TURRETS = {
       // Время до смерти СЧИТАЕМ тем же законом, что и стреляем: урон
       // растёт вместе с заморозкой, и записанное числом оно соврало бы
       // при первой же правке dps/brittle/chillTime.
-      let hp = CONFIG.hp, chill = 0, t = 0;
+      let hp = loadoutHp(), chill = 0, t = 0;
       while (hp > CONFIG.hpEpsilon && t < 60){
         hp -= c.dps * freezeMult(chill) / 60;
         chill = Math.min(1, chill + 1 / 60 / c.chillTime);
@@ -3886,6 +3931,14 @@ function drawTank(t, isPlayer, preview = false){
       [-hl + nD, -nHw], [-hl, -nHw],           // дно выреза и выход
       [-hl, -hw]                               // корма, левый угол
     ];
+  } else if (t.hull.shape === 'sloped'){
+    // Викинг: скошены ВСЕ четыре угла — наклонная броня из оригинала.
+    // Корпус широкий и близкий к квадрату, поэтому срезы крупные: на
+    // такой ширине мелкая фаска просто не читается.
+    outline = [
+      [ hl, -hw + 11], [ hl - 12, -hw], [-hl + 8, -hw], [-hl, -hw + 8],
+      [-hl,  hw -  8], [-hl +  8,  hw], [ hl - 12,  hw], [ hl,  hw - 11]
+    ];
   } else {
     // Хорнет: простой прямоугольник со срезанными носовыми углами.
     outline = [
@@ -3913,18 +3966,60 @@ function drawTank(t, isPlayer, preview = false){
   const sh = t.high ? 7 : 3;
   hullPath(sh, sh); ctx.fill();
 
-  // Гусеницы по бокам, прямые.
-  ctx.fillStyle = '#2f2e29';
-  for (const side of [-1, 1]){
-    const yOut = side * (hw + 2), yIn = side * (hw - 5);
-    ctx.fillRect(-hl - 1, Math.min(yIn, yOut), L + 2, Math.abs(yOut - yIn));
+  /* ГУСЕНИЦЫ. У каждого корпуса свои — сверху это первое, по чему они
+     отличаются, раньше формы:
 
-    // Траки — поперечные насечки, чтобы гусеница читалась.
-    ctx.strokeStyle = 'rgba(200,200,200,.13)';
-    ctx.lineWidth = 1;
-    for (let i = 1; i < 8; i++){
-      const x = -hl + L * (i / 8);
-      ctx.beginPath(); ctx.moveTo(x, yIn); ctx.lineTo(x, yOut); ctx.stroke();
+       Хорнет — крупные редкие траки, как на оригинале;
+       Васп   — мелкая частая лента, понтоны выходят ВПЕРЁД;
+       Викинг — широкая лента, ножки вперёд и чуть назад.
+
+     Вылет вперёд не симметричен вылету назад намеренно: по нему видно,
+     где у корпуса перёд, даже когда башня смотрит вбок.              */
+  const TR = {
+    boxy:    { tw: 5, outF: 1, outB: 1, links:  6, chunky: true  },
+    notched: { tw: 5, outF: 3, outB: 0, links: 11, chunky: false },
+    sloped:  { tw: 8, outF: 7, outB: 2, links: 12, chunky: false }
+  }[t.hull.shape] || { tw: 5, outF: 1, outB: 1, links: 8, chunky: false };
+
+  const TL = L + TR.outF + TR.outB, TX = -hl - TR.outB;
+  for (const side of [-1, 1]){
+    const yOut = side * (hw + 2), yIn = side * (hw - TR.tw);
+    const ty = Math.min(yIn, yOut), th = Math.abs(yOut - yIn);
+    ctx.fillStyle = '#2f2e29';
+    ctx.fillRect(TX, ty, TL, th);
+
+    if (TR.chunky){
+      // Крупные траки: светлые бруски с зазорами, а не насечки.
+      ctx.fillStyle = 'rgba(190,190,185,.20)';
+      const step = TL / TR.links;
+      for (let i = 0; i < TR.links; i++)
+        ctx.fillRect(TX + step * i + 1.2, ty + 0.8, step - 2.4, th - 1.6);
+    } else {
+      ctx.strokeStyle = 'rgba(200,200,200,.13)';
+      ctx.lineWidth = 1;
+      for (let i = 1; i < TR.links; i++){
+        const x = TX + TL * (i / TR.links);
+        ctx.beginPath(); ctx.moveTo(x, ty); ctx.lineTo(x, ty + th); ctx.stroke();
+      }
+    }
+  }
+
+  // Броневые понтоны поверх гусениц — те самые «ножки», которые торчат
+  // вперёд у Васпа и Викинга.
+  if (TR.outF > 2){
+    for (const side of [-1, 1]){
+      const yA = side * (hw + 1.5), yB = side * (hw - TR.tw + 1.5);
+      const pod = [[TX + 2, yA], [TX, yA * 0.72], [TX, yB],
+                   [hl + TR.outF, yB], [hl + TR.outF, yA * 0.72],
+                   [hl + TR.outF - 5, yA]];
+      ctx.beginPath();
+      pod.forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+      ctx.closePath();
+      ctx.fillStyle = t.paint;
+      ctx.fill();
+      ctx.strokeStyle = '#23221e';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
     }
   }
 
@@ -3953,6 +4048,86 @@ function drawTank(t, isPlayer, preview = false){
   // когда танк едет прямо на тебя.
   ctx.fillStyle = 'rgba(35,34,30,.35)';
   ctx.fillRect(-hl + 2, -hw + 4, 5, W - 8);
+
+  /* МЕЛКИЕ ДЕТАЛИ. Своя горсть у каждого корпуса — по оригинальным
+     картинкам. Без них корпуса сверху отличаются только габаритом, и
+     на дистанции боя это почти незаметно.                            */
+  const rib = (x1, x2, y, a) => {
+    ctx.strokeStyle = `rgba(35,34,30,${a})`;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
+  };
+  const louver = (x, y0, y1, n) => {       // жабры-воздухозаборники
+    ctx.strokeStyle = 'rgba(35,34,30,.5)';
+    ctx.lineWidth = 1.4;
+    for (let i = 0; i < n; i++){
+      const px = x + i * 2.6;
+      ctx.beginPath(); ctx.moveTo(px, y0); ctx.lineTo(px, y1); ctx.stroke();
+    }
+  };
+  const lamp = (x, y) => {                 // ходовой огонь
+    ctx.fillStyle = 'rgba(120,214,240,.9)';
+    ctx.fillRect(x - 2.5, y - 1.1, 5, 2.2);
+  };
+
+  if (t.hull.shape === 'boxy'){
+    // Хорнет: рубка-фонарь у носа, рёбра по спине, решётка в бампере,
+    // жабры на корме.
+    ctx.fillStyle = 'rgba(35,34,30,.30)';
+    ctx.beginPath();
+    ctx.moveTo(hl - 20, -6); ctx.lineTo(hl - 6, -4.5);
+    ctx.lineTo(hl - 6, 4.5); ctx.lineTo(hl - 20, 6);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(190,200,205,.25)';
+    ctx.fillRect(hl - 17, -3.2, 8, 6.4);
+    for (const side of [-1, 1]) rib(-hl + 7, hl - 8, side * (hw - 4), 0.35);
+    rib(-hl + 7, hl - 22, 0, 0.18);
+    louver(-hl + 5, -hw + 5, hw - 5, 4);
+    ctx.fillStyle = 'rgba(35,34,30,.45)';
+    for (let i = 0; i < 3; i++) ctx.fillRect(hl - 4, -6 + i * 4.5, 3, 3);
+    lamp(hl - 3, -hw + 3); lamp(hl - 3, hw - 3);
+  } else if (t.hull.shape === 'notched'){
+    // Васп: круглый люк-погон, гранёные плиты по бортам, жабры у кормы.
+    ctx.strokeStyle = 'rgba(35,34,30,.45)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(2, 0, 7, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(35,34,30,.16)';
+    ctx.beginPath(); ctx.arc(2, 0, 7, 0, Math.PI * 2); ctx.fill();
+    for (const side of [-1, 1]){
+      ctx.strokeStyle = 'rgba(35,34,30,.35)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(hl - 4, side * (hw - 4));
+      ctx.lineTo(hl - 16, side * (hw - 8));
+      ctx.lineTo(-hl + 10, side * (hw - 8));
+      ctx.stroke();
+    }
+    louver(-hl + 9, -hw + 5, -2.5, 3);
+    louver(-hl + 9, 2.5, hw - 5, 3);
+    lamp(hl - 9, 0);
+  } else if (t.hull.shape === 'sloped'){
+    // Викинг: плита с погоном башни, рёбра наклонной брони, жабры и
+    // ходовые огни по бортам — по три с каждой стороны, как в оригинале.
+    ctx.fillStyle = 'rgba(35,34,30,.28)';
+    ctx.fillRect(-hl + 9, -hw + 9, L - 22, W - 18);
+    ctx.strokeStyle = 'rgba(35,34,30,.45)';
+    ctx.lineWidth = 1.4;
+    for (const side of [-1, 1]){
+      ctx.beginPath();
+      ctx.moveTo(hl - 12, side * hw); ctx.lineTo(hl, side * (hw - 11));
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-hl + 8, side * hw); ctx.lineTo(-hl, side * (hw - 8));
+      ctx.stroke();
+    }
+    louver(-hl + 4, -hw + 11, hw - 11, 3);
+    ctx.strokeStyle = 'rgba(35,34,30,.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(-t.hull.turretBack, 0, 9, 0, Math.PI * 2); ctx.stroke();
+    for (const side of [-1, 1])
+      for (const px of [hl + 1, -2, -hl + 7]) lamp(px + 3, side * (hw - 3.5));
+  }
+
   ctx.restore();
 
   // --- башня с рельсой ---
@@ -4033,9 +4208,12 @@ function drawTank(t, isPlayer, preview = false){
   // Деления заполняются ДРОБНО. Рельса снимает деление целиком, а твинс
   // грызёт по четверти — при заливке «всё или ничего» полоска стояла бы
   // неподвижно три попадания подряд и врала бы про состояние боя.
-  const pipW = 13, gap = 3;
-  const total = CONFIG.hp * pipW + (CONFIG.hp - 1) * gap;
-  if (!preview) for (let i = 0; i < CONFIG.hp; i++){
+  // Делений столько, сколько держит КОРПУС: у Викинга их четыре, и это
+  // видно раньше, чем он успеет выстрелить.
+  const maxHp = t.maxHp;
+  const pipW = maxHp > 3 ? 9 : 13, gap = 3;
+  const total = maxHp * pipW + (maxHp - 1) * gap;
+  if (!preview) for (let i = 0; i < maxHp; i++){
     const x = t.x - total / 2 + i * (pipW + gap);
     const fill = clamp(t.hp - i, 0, 1);
     ctx.fillStyle = 'rgba(35,34,30,.22)';
@@ -4718,8 +4896,9 @@ function renderGarageStats(){
   // Строку про пушку пишет сама пушка: у рельсы и твинса важны РАЗНЫЕ
   // числа, и общий шаблон на двоих врал бы про обе.
   garageStats.innerHTML =
-    `Корпус <b>${h.name}</b> · скорость <b>${h.speed}</b> · ` +
-    `поворот <b>${h.turn}</b> рад/с · хитбокс <b>${h.radius}</b><br>` +
+    `Корпус <b>${h.name}</b> · здоровье <b>${h.hp || CONFIG.hp}</b> · ` +
+    `скорость <b>${h.speed}</b> · поворот <b>${h.turn}</b> рад/с · ` +
+    `хитбокс <b>${h.radius}</b><br>` +
     TURRETS[LOADOUT.turret].stats();
 }
 
