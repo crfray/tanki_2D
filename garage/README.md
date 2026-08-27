@@ -24,6 +24,7 @@ Tanki Online, чтобы было от чего отталкиваться пр�
 |---|---|---|
 | `hulls/hornet.md` | Корпус Хорнет (игрок) | `CONFIG.hulls.hornet` |
 | `hulls/wasp.md` | Корпус Васп (бот) | `CONFIG.hulls.wasp` |
+| `hulls/viking.md` | Корпус Викинг (средний) | `CONFIG.hulls.viking` |
 | `turrets/railgun/railgun.md` | Рельса | `CONFIG.rail` |
 | `turrets/twins/twins.md` | Твинс | `CONFIG.twins` |
 | `turrets/smoky/smoky.md` | Смоки | `CONFIG.smoky` |

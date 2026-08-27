@@ -268,6 +268,7 @@
             <div class="picks">
               <button class="mode gpick is-on" data-hull="hornet">Хорнет</button>
               <button class="mode gpick" data-hull="wasp">Васп</button>
+              <button class="mode gpick" data-hull="viking">Викинг</button>
             </div>
           </div>
           <div class="garage-group">
@@ -306,6 +307,17 @@
    ИСТОРИЯ ИЗМЕНЕНИЙ
    -----------------
    0.10 (в работе)
+        Все шесть пушек перерисованы по оригинальным картинкам: тонкий
+        ребристый ствол рельсы, дула твинса из-под коробки, пульт у
+        смоки, трубка и короткое сопло огнемёта, гранёный панцирь
+        изиды, клин фриза с хребтом. Ни одна башня не шире корпуса.
+        Плазма твинса стала зелёной: красная терялась на ржавом боте.
+        Третий корпус — Викинг, первый средний: здоровье 4 против двух
+        у лёгких, но крупнее и медленнее. Здоровье переехало в корпус,
+        полоска показывает столько делений, сколько он держит.
+        Все три корпуса обросли деталями по оригинальным картинкам:
+        гусеницы отличают их раньше формы, у Васпа и Викинга понтоны
+        выходят вперёд «ножками».
         Карта стала данными: список предметов (PROPS) — стены, дома,
         деревья, кусты, лужи, трубы, столбы, остовы, вышки, мосты.
         Редактор карт — для правки готовых карт и сохранения файлом:
@@ -470,7 +482,29 @@ const CONFIG = {
     // ломается баланс, ведь широкий танк просто крупнее как мишень.
     wasp:   { speed: 124, turn: 1.4, radius: 16, len: 46, wid: 26,
               shape: 'notched', turretBack: 9, barrel: 46,
-              color: '#b04a33', name: 'Васп'   }
+              color: '#b04a33', name: 'Васп'   },
+
+    /* Викинг — первый СРЕДНИЙ корпус. Он не «третий лёгкий с другими
+       числами», а другой класс: вдвое больше здоровья ценой скорости и
+       габарита. Отсюда и всё остальное:
+
+         hp 4      — ровно вдвое против лёгких. Хорнет это половина
+                     Викинга, и по нему теперь меряется вся живучесть.
+         54 x 38   — широкий и приземистый, ближе к квадрату, чем лёгкие.
+                     Он и мишень крупнее: вдвое больше здоровья не должно
+                     доставаться даром.
+         radius 21 — хитбокс по ТЕЛУ, а не по понтонам: иначе попадания
+                     засчитывались бы по воздуху рядом с гусеницами.
+         92 / 1.25 — медленнее и неповоротливее обоих лёгких, но это
+                     средний корпус, а не тяжёлый: разница чувствуется,
+                     а ездить не мешает.
+
+       Овердрайва «Берсерк» из оригинала у него НЕТ и не будет: овердрайвы
+       в эту игру не переносим. Корпус отличается только числами и
+       силуэтом.                                                       */
+    viking: { speed: 92,  turn: 1.25, radius: 21, len: 54, wid: 38,
+              shape: 'sloped',  turretBack: 3, barrel: 46, hp: 4,
+              color: '#4a6b4a', name: 'Викинг' }
   },
 
   rail: {
@@ -515,15 +549,21 @@ const CONFIG = {
     // пушка ближнего боя, и короткий ствол должен читаться с первого
     // взгляда, а не выясняться по числу попаданий.
     barrel: 23,
-    spread: 7,          // насколько дула разнесены от оси, в каждую сторону
+    // Насколько дула разнесены от оси. 5.5, а не 7: на оригинале они
+    // идут ближе к середине казны, и рисунок обязан совпадать с тем,
+    // ОТКУДА реально вылетают шарики.
+    spread: 5.5,
 
     // Вчетверо слабее рельсовой отдачи и БЕЗ срыва заряда. Иначе очередь
     // держала бы рельсу в вечном сбросе накопления — та вообще не смогла
     // бы выстрелить, и дуэль пушек превратилась бы в одностороннюю.
     aimKick: 0.14,
 
-    color: '#ff4d3d',   // плазма по умолчанию красная
-    glow: '255,110,85'  // цвет ореола, отдельно — он светлее ядра
+    // Плазма ЗЕЛЁНАЯ. Красная спорила с ржавой краской бота: на его
+    // корпусе очередь просто терялась. Зелёного на арене нет больше
+    // нигде, поэтому очередь читается на любом фоне и с любой стороны.
+    color: '#5ee06b',   // тело шарика
+    glow: '150,240,150' // ореол, отдельно — он светлее ядра
   },
 
   // Смоки — обычная танковая пушка посередине между рельсой и твинсом.
@@ -690,7 +730,9 @@ const CONFIG = {
     // где кончается башня и начинается поток, — и заодно задаёт, докуда
     // достают губы. Держим на 15: у Хорнета до носа 25, то есть губы
     // кончаются чуть дальше середины корпуса и башня не лезет на нос.
-    barrel: 15,
+    // Срез губ, из него выходит поток. 13, а не 15: корпус изиды сдвинут
+    // назад к оси башни, и точка вылета переехала вместе с ним.
+    barrel: 13,
 
     // Изгиб потока — синусоида вдоль луча, прошитая к излучателю и к
     // точке на хитбоксе. У обоих концов размах гасится огибающей,
@@ -718,7 +760,11 @@ const CONFIG = {
     standoff: 90        // снизу вверх бьём, отъехав не меньше этого от обрыва
   },
 
-  hp: 2,                // сколько попаданий держит танк
+  // Здоровье по умолчанию: столько держит корпус, который своего числа
+  // не задал (оба лёгких). У Викинга своё — 4. Это же число остаётся
+  // мерой всего баланса: «два попадания рельсы» отмерены по лёгкому
+  // корпусу, а тяжёлый живёт ровно вдвое дольше.
+  hp: 2,                // сколько попаданий держит лёгкий корпус
 
   // Порог смерти. НЕ ноль: урон бывает дробным и непрерывным (твинс по
   // 0.25, огнемёт долями кадра), и на сложении таких кусков остаётся
@@ -1567,7 +1613,7 @@ class Tank {
     this.bodyAngle = angle;          // куда смотрит корпус
     this.turretAngle = angle;        // куда смотрит рельса
 
-    this.hp = CONFIG.hp;
+    this.hp = this.maxHp;
     this.cooldown = 0;               // сколько секунд до следующего выстрела
     this.charge = 0;                 // накопленная энергия рельсы, 0..1
     this.turretSpeed = CONFIG.rail.turretTurn;  // у бота будет своя, медленнее
@@ -1620,6 +1666,10 @@ class Tank {
 
   get alive(){ return this.deadTimer <= 0; }
   get radius(){ return this.hull.radius; }
+  /* Сколько держит ЭТОТ корпус. Число живёт в корпусе, а не в CONFIG:
+     Викинг вдвое живучее лёгких, и полоска здоровья, лечение изиды и
+     подписи в гараже спрашивают именно корпус.                       */
+  get maxHp(){ return this.hull.hp || CONFIG.hp; }
 
   /* Краска, которой танк рисуется ПРЯМО СЕЙЧАС. Обычно это цвет стороны,
      но промёрзшая машина уходит в лёд — и это единственная индикация
@@ -1853,7 +1903,7 @@ class Tank {
     this.x = this.spawnX;
     this.y = this.spawnY;
     this.bodyAngle = this.turretAngle = this.spawnAngle;
-    this.hp = CONFIG.hp;
+    this.hp = this.maxHp;
     this.cooldown = 0;
     this.charge = 0;
     this.aimKick = 0;
@@ -1954,6 +2004,14 @@ function scoreKill(shooter, target){
 // Живые противники этого танка. Своих (та же сторона) не трогаем.
 function enemiesOf(t){
   return tanks.filter(o => o !== t && o.alive && o.side !== t.side);
+}
+
+/* Все живые танки, кроме себя — и свои тоже. Нужно ровно одной пушке:
+   изида наводится и на союзника, потому что лечит его тем же потоком.
+   Остальным своих в списке быть НЕ должно: пуля и конус по своим не
+   работают.                                                          */
+function targetsOf(t){
+  return tanks.filter(o => o !== t && o.alive);
 }
 
 // Ближайший живой противник — по нему целится бот.
@@ -2122,6 +2180,14 @@ function tankAt(px, py, shooter, extra = 0){
    одна строка здесь, а не пушка.                                     */
 function allied(a, b){
   return a !== b && a.team !== null && a.team === b.team;
+}
+
+/* Сколько держит корпус, выбранный в гараже. Подписи пушек считают время
+   до смерти по НЕМУ: с Викингом «два попадания рельсы» превращаются в
+   четыре, и подпись обязана это показывать, а не врать про лёгкий.   */
+function loadoutHp(){
+  const h = CONFIG.hulls[LOADOUT.hull];
+  return (h && h.hp) || CONFIG.hp;
 }
 
 /* Один шаг работы орудия.
@@ -3096,6 +3162,50 @@ function drawProps(editing = false){
      hit()       что делает попадание: {damage, aimKick, breakCharge, crit}
      drawShot()  как выглядит снаряд в полёте
    ------------------------------------------------------------------ */
+/* Мелкие помощники для рисунка башен. Все шесть пушек собираются одними
+   и теми же приёмами — гранёный контур, коробка, нить, кольцо, — и без
+   них каждая обрастала бы своим ctx.beginPath на десять строк.
+   Координаты ЛОКАЛЬНЫЕ: ноль в опоре башни, +x вперёд.              */
+function tPoly(pts, fill, stroke, lw){
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+  ctx.closePath();
+  if (fill){ ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke){ ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1.5; ctx.stroke(); }
+}
+function tBox(x, y, w, h, fill, stroke, lw){
+  ctx.fillStyle = fill; ctx.fillRect(x, y, w, h);
+  if (stroke){ ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1.4;
+               ctx.strokeRect(x, y, w, h); }
+}
+function tLine(x1, y1, x2, y2, color, w){
+  ctx.strokeStyle = color; ctx.lineWidth = w;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+}
+function tRing(x, y, r, color, w){
+  ctx.strokeStyle = color; ctx.lineWidth = w || 2;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+}
+function tDot(x, y, r, color){
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+function tGlow(x, y, r, rgb, a){
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, `rgba(${rgb},${a})`);
+  g.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+/* Волосяная нить: тонкая линия с чуть более тёмной окантовкой. Тонкие
+   детали без окантовки на песке арены просто теряются.               */
+function tHair(path, color){
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(35,34,30,.5)'; ctx.lineWidth = 1.6; path(); ctx.stroke();
+  ctx.strokeStyle = color;               ctx.lineWidth = 0.8; path(); ctx.stroke();
+  ctx.lineJoin = 'miter'; ctx.lineCap = 'butt';
+}
+
 const TURRETS = {
   railgun: {
     name: 'Рельса',
@@ -3125,68 +3235,39 @@ const TURRETS = {
       const r = CONFIG.rail;
       return `Пушка <b>Рельса</b> · заряд <b>${r.charge}</b> с · ` +
              `перезарядка <b>${r.reload}</b> с · ` +
-             `<b>${CONFIG.hp}</b> попадания до смерти`;
+             `<b>${loadoutHp()}</b> попадания до смерти`;
     },
 
     drawTurret(t, barrel){
-      const charge = t.charge, domeColor = t.paint;
-      // Основание — казённая коробка, из которой растёт ствол.
-      ctx.fillStyle = '#3a3831';
-      ctx.fillRect(-10, -8, 24, 16);
-      ctx.strokeStyle = '#23221e';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(-10, -8, 24, 16);
+      const b = barrel, charge = t.charge;
+      /* Оригинал: длинная гранёная казна из наклонных плит и ТОНКИЙ
+         ствол, собранный из секций — кольца идут по всей его длине.
+         Казна 22 на 16: длиннее, чем шире, как на фотографии.       */
+      tPoly([[-13,-6],[-10,-8],[4,-8],[9,-5],[9,5],[4,8],[-10,8],[-13,6]],
+            t.paint, '#23221e', 2);
+      tPoly([[-10,-4.5],[-2,-5.5],[2,-3],[2,3],[-2,5.5],[-10,4.5]],
+            'rgba(35,34,30,.45)');
+      tRing(-6, 0, 2.8, 'rgba(120,214,240,.65)', 2);   // глазок на казне
 
-      // Ствол-нитка: тонкая трапеция от казны к дулу.
-      const bx0 = 12;
-      ctx.fillStyle = '#2a2925';
-      ctx.beginPath();
-      ctx.moveTo(bx0, -2.2); ctx.lineTo(barrel, -1.6);
-      ctx.lineTo(barrel, 1.6); ctx.lineTo(bx0, 2.2);
-      ctx.closePath(); ctx.fill();
+      // Ствол-игла. Толщина 1.8 у казны и 1.2 у среза.
+      tPoly([[9,-1.8],[b,-1.2],[b,1.2],[9,1.8]], '#2a2925', '#23221e', 1);
+      ctx.fillStyle = '#4f4c44';                        // кольца-секции
+      for (let i = 0; i < 9; i++){
+        const x = 12 + i * ((b - 16) / 8);
+        ctx.fillRect(x, -2.5, 1.5, 5);
+      }
 
-      // Две направляющие вдоль ствола + бегущий по ним заряд.
+      // Направляющие вдоль ствола и бегущий по ним заряд: без них
+      // накопление не видно, а оно — половина смысла рельсы.
       for (const side of [-1, 1]){
-        ctx.strokeStyle = side < 0 ? '#6a675d' : '#413e37';
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(bx0, side * 3.4);
-        ctx.lineTo(barrel - 3, side * 2.6);
-        ctx.stroke();
-
-        if (charge > 0){
-          ctx.strokeStyle = `rgba(167,90,247,${charge * 0.85})`;
-          ctx.lineWidth = 1.4;
-          ctx.beginPath();
-          ctx.moveTo(bx0, side * 3.4);
-          ctx.lineTo(bx0 + (barrel - 3 - bx0) * charge, side * (3.4 - 0.8 * charge));
-          ctx.stroke();
-        }
+        tLine(9, side * 2.5, b - 3, side * 1.9,
+              side < 0 ? '#6a675d' : '#413e37', 1.2);
+        if (charge > 0)
+          tLine(9, side * 2.5, 9 + (b - 12) * charge, side * (2.5 - 0.6 * charge),
+                `rgba(167,90,247,${charge * 0.85})`, 1.4);
       }
-
-      // Рёбра-перемычки между рельсами — фактура, не толщина.
-      ctx.fillStyle = '#4f4c44';
-      for (let i = 0; i < 6; i++){
-        const x = bx0 + 4 + i * ((barrel - bx0 - 10) / 5.5);
-        ctx.fillRect(x, -3.2, 1.6, 6.4);
-      }
-
-      // Дульный срез.
-      ctx.fillStyle = '#57544a';
-      ctx.fillRect(barrel - 4, -3.4, 4, 6.8);
-
-      // Купол башни поверх основания + люк.
-      ctx.beginPath();
-      ctx.arc(0, 0, 9.5, 0, Math.PI * 2);
-      ctx.fillStyle = domeColor;
-      ctx.fill();
-      ctx.strokeStyle = '#23221e';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(-1, 0, 4, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(35,34,30,.45)';
-      ctx.fill();
+      tBox(b - 3.5, -2.2, 3.5, 4.4, '#57544a', '#23221e', 1.1);
+    
     }
   },
 
@@ -3247,7 +3328,7 @@ const TURRETS = {
       const w = CONFIG.twins;
       return `Пушка <b>Твинс</b> · очередь из двух дул по <b>${w.interval}</b> с · ` +
              `без перезарядки · шарик <b>${w.speed}</b> px/с · ` +
-             `<b>${Math.round(CONFIG.hp / w.damage)}</b> попаданий до смерти`;
+             `<b>${Math.round(loadoutHp() / w.damage)}</b> попаданий до смерти`;
     },
 
     /* Силуэт твинса держится на двух вещах: ШИРОКАЯ плоская коробка
@@ -3255,62 +3336,29 @@ const TURRETS = {
        коробка перекрыла их казённую часть — тогда они выглядят
        вставленными в башню, а не приклеенными снаружи.               */
     drawTurret(t, barrel){
-      const cfg = CONFIG.twins;
-      const bx0 = 2;                          // где дуло выходит из башни
-      // Полутолщина дула. Держим её меньше разноса: между дулами должна
-      // оставаться ЩЕЛЬ, иначе пара сливается в один широкий брусок и
-      // весь смысл силуэта пропадает.
-      const bh  = 2.8;
-
-      // Дульный блок и рёбра считаются ОТ длины дула, а не фиксированными
-      // числами: правишь barrel в CONFIG — рисунок едет следом, а не
-      // вылезает за срез.
-      const mz   = 4;                         // длина дульного блока
-      const rib0 = 9, rib1 = barrel - mz - 2; // участок под рёбра
-      const ribs = Math.max(0, Math.floor((rib1 - rib0) / 5));
-
+      const b = barrel, cfg = CONFIG.twins;
+      /* Оригинал: коробка с двумя дулами, на концах толстые муфты, в
+         середине светящаяся вставка. Дула рисуем ПОД коробкой — на
+         фотографии они выходят из-под неё, а не приставлены сбоку.  */
       for (const side of [-1, 1]){
         const y = side * cfg.spread;
-
-        // Тело дула. Светлее корпуса башни — иначе на тёмной обводке
-        // дула сливаются в одно пятно и пушка читается как однострволка.
-        ctx.fillStyle = '#4d4a42';
-        ctx.fillRect(bx0, y - bh, barrel - bx0, bh * 2);
-        ctx.strokeStyle = '#23221e';
-        ctx.lineWidth = 1.6;
-        ctx.strokeRect(bx0, y - bh, barrel - bx0, bh * 2);
-
-        ctx.fillStyle = '#2f2d28';             // рёбра охлаждения поперёк
-        for (let i = 0; i < ribs; i++)
-          ctx.fillRect(rib0 + i * ((rib1 - rib0) / ribs), y - bh, 1.8, bh * 2);
-
-        ctx.fillStyle = '#6a675d';             // дульный блок
-        ctx.fillRect(barrel - mz, y - bh - 1, mz, bh * 2 + 2);
-        ctx.strokeStyle = '#23221e';
-        ctx.lineWidth = 1.6;
-        ctx.strokeRect(barrel - mz, y - bh - 1, mz, bh * 2 + 2);
+        tBox(5, y - 1.6, b - 9, 3.2, '#3a3831', '#23221e', 1.1);
+        tBox(b - 6, y - 2.6, 5, 5.2, '#57544a', '#23221e', 1.1);
+        tLine(6, y, b - 7, y, 'rgba(255,255,255,.10)', 1.2);
       }
 
-      // Коробка башни. Ниже и короче рельсовой казны, зато шире: у
-      // рельсы силуэт держится на длинном стволе, у твинса — на паре.
-      // Специально не закрывает корпус целиком, иначе не видно машину.
-      ctx.fillStyle = t.paint;
-      ctx.fillRect(-10, -10, 17, 20);
-      ctx.strokeStyle = '#23221e';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(-10, -10, 17, 20);
+      tPoly([[-11,-7],[-8,-9],[4,-9],[8,-6],[8,6],[4,9],[-8,9],[-11,7]],
+            t.paint, '#23221e', 2);
+      tPoly([[-8,-5.5],[0,-6.5],[3,-4.5],[3,4.5],[0,6.5],[-8,5.5]],
+            'rgba(35,34,30,.35)');
+      // Окно светится цветом СНАРЯДА: по нему на глаз отличаешь твинс
+      // от рельсы, даже когда танк стоит носом к тебе.
+      tRing(-2, 0, 2.8, `rgba(${cfg.glow},.85)`, 2);
+      tDot(-2, 0, 1.2, 'rgba(255,255,255,.75)');
 
-      // Тёмная плита на корме башни — сразу видно, где перед.
-      ctx.fillStyle = 'rgba(35,34,30,.4)';
-      ctx.fillRect(-10, -7, 4, 14);
-
-      // Плазменное окно по центру. Оно светится цветом СНАРЯДА, а не
-      // краской стороны: по нему на глаз отличаешь твинс от рельсы,
-      // даже когда танк стоит носом к тебе.
-      ctx.fillStyle = `rgba(${cfg.glow},.9)`;
-      ctx.beginPath(); ctx.arc(-1, 0, 3.2, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,240,235,.8)';
-      ctx.beginPath(); ctx.arc(-1, 0, 1.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(35,34,30,.4)';              // плиты на корме
+      for (let i = 0; i < 3; i++) ctx.fillRect(-10, -6.5 + i * 5.2, 4, 3.6);
+    
     }
   },
 
@@ -3351,8 +3399,8 @@ const TURRETS = {
 
     stats(){
       const c = CONFIG.smoky;
-      const near = Math.ceil(CONFIG.hp / c.damage);
-      const far  = Math.ceil(CONFIG.hp / c.damageFar);
+      const near = Math.ceil(loadoutHp() / c.damage);
+      const far  = Math.ceil(loadoutHp() / c.damageFar);
       return `Пушка <b>Смоки</b> · перезарядка <b>${c.reload}</b> с · ` +
              `без накопления · снаряд <b>${c.speed}</b> px/с<br>` +
              `<b>${near}</b> выстрела в упор, <b>${far}</b> с конца карты · ` +
@@ -3363,40 +3411,25 @@ const TURRETS = {
        Рельса — тонкая и длинная, твинс — пара коротких, смоки —
        мясистая одиночка. Различать надо с одного взгляда в бою.     */
     drawTurret(t, barrel){
-      // Полутолщина ствола. У рельсы 2.2 у казны — держим 2.0, то есть
-      // чуть тоньше. Смоки и рельса — оружие одного калибра по виду,
-      // различает их ДЛИНА ствола, а не его мясистость.
-      const bh = 2.0;
-      const bx0 = 3;
+      const b = barrel;
+      /* Оригинал: почти прямоугольный брусок с пультом на корме, круглым
+         люком и тонким стволом с прямоугольным соплом.               */
+      tBox(3, -1.5, 5, 3, '#2a2925');                   // выход ствола из казны
+      tPoly([[-13,-5.5],[-11.5,-7],[3,-7],[8,-4.5],[8,4.5],[3,7],[-11.5,7],[-13,5.5]],
+            t.paint, '#23221e', 2);
+      tBox(-11.5, -4.6, 7, 9.2, 'rgba(35,34,30,.4)');   // приборная панель
+      ctx.fillStyle = 'rgba(190,200,205,.35)';
+      for (let i = 0; i < 4; i++)
+        ctx.fillRect(-10.6 + (i % 2) * 3.2, -3.3 + Math.floor(i / 2) * 3.4, 2.2, 2.2);
+      tRing(-1.5, 0, 2.9, 'rgba(35,34,30,.45)', 2);     // люк
+      tDot(-1.5, 0, 1.2, 'rgba(120,214,240,.7)');
 
-      ctx.fillStyle = '#3f3c35';             // тело ствола
-      ctx.fillRect(bx0, -bh, barrel - bx0, bh * 2);
-      ctx.strokeStyle = '#23221e';
-      ctx.lineWidth = 1.2;
-      ctx.strokeRect(bx0, -bh, barrel - bx0, bh * 2);
-
-      ctx.fillStyle = '#5d5a51';             // бандаж — фактура, не толщина
-      ctx.fillRect(barrel - 11, -bh - 0.8, 2, (bh + 0.8) * 2);
-
-      const mh = bh + 1.4;                   // дульный тормоз — лёгкое утолщение
-      ctx.fillStyle = '#6a675d';
-      ctx.fillRect(barrel - 4, -mh, 4, mh * 2);
-      ctx.strokeRect(barrel - 4, -mh, 4, mh * 2);
-
-      // Башня: узкая коробка. Ствол тонкий и короткий, поэтому силуэт
-      // машины держит именно она.
-      ctx.fillStyle = t.paint;
-      ctx.fillRect(-10, -8, 16, 16);
-      ctx.lineWidth = 2;
-      ctx.strokeRect(-10, -8, 16, 16);
-
-      ctx.fillStyle = 'rgba(35,34,30,.4)';   // плита на корме
-      ctx.fillRect(-10, -5.5, 3.5, 11);
-
-      ctx.beginPath();                       // люк
-      ctx.arc(-2, 0, 3.4, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(35,34,30,.45)';
-      ctx.fill();
+      // Ствол тонкий: смоки и рельса одного калибра по виду, различает
+      // их ДЛИНА, а не мясистость.
+      tPoly([[8,-1.5],[b-4,-1.2],[b-4,1.2],[8,1.5]], '#2a2925', '#23221e', 1);
+      tBox(b - 4.5, -2.6, 4.5, 5.2, '#57544a', '#23221e', 1.1);   // сопло
+      tLine(b - 1.4, -2.6, b - 1.4, 2.6, 'rgba(35,34,30,.55)', 1);
+    
     },
 
     /* Снаряд: болванка с маленьким хвостом пламени СЗАДИ. Хвост тут не
@@ -3494,7 +3527,7 @@ const TURRETS = {
       const c = CONFIG.flame;
       return `Пушка <b>Огнемёт</b> · дальность <b>${c.range}</b> px, ближний бой<br>` +
              `баллон <b>${c.tank}</b> с огня, восполняется за <b>${c.refill}</b> с · ` +
-             `<b>${Math.round(CONFIG.hp / c.dps)}</b> с в упор до смерти · ` +
+             `<b>${Math.round(loadoutHp() / c.dps)}</b> с в упор до смерти · ` +
              `догорание <b>${c.burnTime}</b> с`;
     },
 
@@ -3502,48 +3535,40 @@ const TURRETS = {
        узкое сопло. Все остальные пушки в игре — коробки со стволом,
        поэтому капля узнаётся сразу.                                  */
     drawTurret(t, barrel){
-      ctx.fillStyle = t.paint;
-      ctx.beginPath();
-      ctx.moveTo(-12, -11);
-      ctx.quadraticCurveTo(-15, 0, -12, 11);       // округлая корма
-      ctx.lineTo(1, 7);
-      ctx.quadraticCurveTo(7, 4, 10, 0);           // сход на нос
-      ctx.quadraticCurveTo(7, -4, 1, -7);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = '#23221e';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      const b = barrel;
+      /* Оригинал: длинная капля, широкая у кормы и сходящая на нос, по
+         борту идёт трубка от баллона к соплу, на спине рифлёная
+         вставка. Сопло короткое (14, как ствол смоки) и РАСШИРЯЕТСЯ
+         к срезу.                                                     */
+      tPoly([[-14,-4],[-11,-7.5],[-2,-8.5],[8,-6],[16,-3],
+             [16,3],[8,6],[-2,8.5],[-11,7.5],[-14,4]], t.paint, '#23221e', 2);
 
-      // Рёбра баллона вдоль корпуса — фактура капли.
-      ctx.strokeStyle = 'rgba(35,34,30,.35)';
-      ctx.lineWidth = 1.2;
-      for (const side of [-1, 1]){
-        ctx.beginPath();
-        ctx.moveTo(-10, side * 7);
-        ctx.quadraticCurveTo(0, side * 6, 6, side * 2.4);
-        ctx.stroke();
+      tPoly([[-10,-4.6],[-2,-5.6],[7,-3.6],[12,-2],[12,2],[7,3.6],[-2,5.6],[-10,4.6]],
+            'rgba(35,34,30,.30)');
+      ctx.strokeStyle = 'rgba(35,34,30,.5)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 7; i++){
+        const x = -9 + i * 3, h = 5.4 - Math.max(0, x - 2) * 0.28;
+        ctx.beginPath(); ctx.moveTo(x, -h); ctx.lineTo(x, h); ctx.stroke();
       }
 
-      // Сопло: тонкая трубка с кольцами и раструбом.
-      ctx.fillStyle = '#4d4a42';
-      ctx.fillRect(8, -2.6, barrel - 8, 5.2);
-      ctx.strokeStyle = '#23221e';
-      ctx.lineWidth = 1.4;
-      ctx.strokeRect(8, -2.6, barrel - 8, 5.2);
+      // По ОДНОЙ трубке с каждой стороны, вдоль самой кромки: две в ряд
+      // выглядели нагромождением.
+      for (const side of [-1, 1])
+        tHair(() => {
+          ctx.beginPath();
+          ctx.moveTo(-10.5, side * 5.6); ctx.lineTo(-2, side * 6.8);
+          ctx.lineTo(8, side * 4.6);     ctx.lineTo(15, side * 2.2);
+        }, '#6d6a60');
 
+      tPoly([[16,-1.4],[b,-2.8],[b,2.8],[16,1.4]], '#4d4a42', '#23221e', 1.3);
       ctx.fillStyle = '#2f2d28';
-      for (let i = 0; i < 3; i++) ctx.fillRect(12 + i * 5, -3.4, 1.8, 6.8);
-
-      ctx.fillStyle = '#6a675d';                   // раструб
-      ctx.beginPath();
-      ctx.moveTo(barrel - 3, -3);   ctx.lineTo(barrel, -4.6);
-      ctx.lineTo(barrel, 4.6);      ctx.lineTo(barrel - 3, 3);
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-
-      // Запальник — рыжая точка у среза, видно даже когда не стреляешь.
-      ctx.fillStyle = 'rgba(255,138,38,.9)';
-      ctx.beginPath(); ctx.arc(barrel - 1, 0, 1.6, 0, Math.PI * 2); ctx.fill();
+      for (let i = 0; i < 3; i++){
+        const x = 18.5 + i * 3.6, h = 1.6 + (x - 16) * 0.1;
+        ctx.fillRect(x, -h, 1.5, h * 2);
+      }
+      tDot(b - 1.4, 0, 1.6, 'rgba(255,138,38,.9)');     // запальник
+    
     }
   },
 
@@ -3578,10 +3603,14 @@ const TURRETS = {
       // Мимо хитбокса — баллон НЕ тратится. Изида не льёт в воздух:
       // нет цели — нет потока, значит и жечь нечего. И разгон сгорает:
       // «непрерывно» значит непрерывно.
-      // Целей может быть несколько: берём ближайшую из тех, по которым
-      // прицел реально лёг на хитбокс. Поток один — и цель у него одна.
+      /* Целей может быть несколько: берём ближайшую из тех, по которым
+         прицел реально лёг на хитбокс. Поток один — и цель у него одна.
+
+         Список СО СВОИМИ: изида лечит союзника тем же потоком, и если
+         искать цель только среди врагов, лечить окажется некого. Именно
+         так лечение и не работало, когда пушки обобщили на N танков. */
       let target = null, lock = null, best = Infinity;
-      for (const o of enemiesOf(shooter)){
+      for (const o of targetsOf(shooter)){
         const l = isidaLock(shooter, o);
         if (!l) continue;
         const d = Math.hypot(l.x2 - l.x1, l.y2 - l.y1);
@@ -3604,7 +3633,7 @@ const TURRETS = {
       // Своих лечим той же скоростью, какой чужих плавим, и тем же
       // разгоном. Выше полного здоровья не наливаем: перелечить нельзя.
       if (lock.heal){
-        target.hp = Math.min(CONFIG.hp, target.hp + cfg.heal * mult * dt);
+        target.hp = Math.min(target.maxHp, target.hp + cfg.heal * mult * dt);
         return;
       }
 
@@ -3624,7 +3653,7 @@ const TURRETS = {
       // Время до смерти СЧИТАЕМ тем же законом, что и стреляем: разгон
       // делает его нелинейным, и записанное числом оно соврало бы при
       // первой же правке rampTime/rampMax.
-      let hp = CONFIG.hp, t = 0;
+      let hp = loadoutHp(), t = 0;
       while (hp > CONFIG.hpEpsilon && t < 60){
         hp -= c.dps * isidaMult(t) / 60;
         t += 1 / 60;
@@ -3652,85 +3681,34 @@ const TURRETS = {
        срезанные углы кормы, скос борта к губе, крышка отсека, которая
        ПОВТОРЯЕТ обвод корпуса башни, и вырез с излучателем.          */
     drawTurret(t, barrel){
-      const cfg = CONFIG.isida;
-      const nose = barrel;                   // плоскость губ = вылет потока
+      const b = barrel, cfg = CONFIG.isida;
+      /* Оригинал: низкий гранёный панцирь, тёмная крышка с поперечными
+         рёбрами, раздвоенный нос с излучателем между губами.
+         Корпус сдвинут назад (-10..13): раньше он висел впереди оси и
+         выглядел приклеенным к носу машины.                          */
+      tPoly([[-10,-2.5],[-8,-5.5],[-3,-7.5],[8,-7.5],[b,-5.5],[b,-3],
+             [7,-3],[7,3],[b,3],[b,5.5],[8,7.5],[-3,7.5],[-8,5.5],[-10,2.5]],
+            t.paint, '#23221e', 2);
 
-      // Контур одним списком точек — правится числами, а не переписыванием
-      // кривых. Обход: корма → левый борт → губа → вырез → зеркально назад.
-      const body = [
-        [-11, -2.5], [-9.5, -6], [-3.5, -8.5], [2, -9.5],
-        [nose - 3, -9.5], [nose, -7.5], [nose, -5],      // левая губа
-        [6, -5], [6, 5],                                 // вырез под излучатель
-        [nose, 5], [nose, 7.5], [nose - 3, 9.5],         // правая губа
-        [2, 9.5], [-3.5, 8.5], [-9.5, 6], [-11, 2.5]
-      ];
-      const poly = pts => {
-        ctx.beginPath();
-        pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
-        ctx.closePath();
-      };
+      tPoly([[-8.5,-2],[-7,-4.2],[-3,-5.6],[5,-5.6],[5,5.6],[-3,5.6],[-7,4.2],[-8.5,2]],
+            '#3a3831', 'rgba(35,34,30,.55)', 1.2);
+      ctx.fillStyle = 'rgba(35,34,30,.45)';
+      for (let i = 0; i < 5; i++) ctx.fillRect(-6.5 + i * 2.4, -5.2, 1.1, 10.4);
 
-      ctx.fillStyle = t.paint;
-      poly(body); ctx.fill();
-      ctx.strokeStyle = '#23221e';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // Крышка отсека. Раньше это был отдельный шестиугольник, живший
-      // своей жизнью, — из-за него башня и выглядела слепленной из двух
-      // случайных фигур. Теперь крышка ПОВТОРЯЕТ обвод: те же срезы
-      // кормы и тот же скос борта, только уже и короче.
-      ctx.fillStyle = '#3a3831';
-      poly([[-8.5, -1.6], [-7.5, -3.6], [-3.5, -5], [1, -5.4],
-            [3, -5.4], [3, 5.4], [1, 5.4], [-3.5, 5], [-7.5, 3.6], [-8.5, 1.6]]);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(35,34,30,.55)';
-      ctx.lineWidth = 1.2; ctx.stroke();
-
-      // Перемычки на крышке — фактура, а не толщина. Три штуки: меньше
-      // читается как случайная царапина, больше — как решётка. Держим их
-      // ВНУТРИ крышки: вылезли за край — и башня становится чёрной,
-      // краска стороны перестаёт читаться.
-      ctx.fillStyle = 'rgba(35,34,30,.4)';
-      for (let i = 0; i < 3; i++) ctx.fillRect(-5 + i * 3, -4.6, 1.2, 9.2);
-
-      // Блик по борту вдоль скоса. Тот же приём, что и на носовой броне
-      // корпуса: одна светлая линия показывает, что грань наклонная.
-      ctx.strokeStyle = 'rgba(255,255,255,.14)';
-      ctx.lineWidth = 1.6;
-      for (const side of [-1, 1]){
-        ctx.beginPath();
-        ctx.moveTo(-3, side * 7.6);
-        ctx.lineTo(nose - 4, side * 8.4);
-        ctx.stroke();
-      }
-
-      // Цвет свечения тот же, что у потока: пока льёшь — башня светится
-      // тем же, чем и нить. По ней видно, лечишь ты или плавишь.
+      // Цвет свечения тот же, что у потока: по башне видно, лечишь ты
+      // или плавишь.
       const glow = t.stream && t.stream.heal ? cfg.cure : cfg.hurt;
+      // Короткая нить ровно в середине борта: длинная спорила с рёбрами.
+      for (const side of [-1, 1])
+        tHair(() => {
+          ctx.beginPath();
+          ctx.moveTo(-2.5, side * 6.6); ctx.lineTo(4.5, side * 6.6);
+        }, `rgba(${glow},.9)`);
 
-      // Прорези на губах — по ним пушка читается как энергетическая,
-      // даже когда молчит. Прямые, вдоль оси: форма гранёная.
-      ctx.fillStyle = `rgba(${glow},.75)`;
-      for (const side of [-1, 1]) ctx.fillRect(nose - 6.5, side * 7.2 - 0.9, 5, 1.8);
-
-      // Излучатель утоплен в вырез, у среза губ — скошенное горло.
-      // Вырез при этом остаётся ВИДЕН: он и есть силуэт, забивать его
-      // железом нельзя.
-      ctx.fillStyle = '#2f2d28';
-      poly([[6, -3.6], [nose - 3, -3.6], [nose - 1, -2.2],
-            [nose - 1, 2.2], [nose - 3, 3.6], [6, 3.6]]);
-      ctx.fill();
-      ctx.strokeStyle = '#23221e';
-      ctx.lineWidth = 1.4; ctx.stroke();
-
-      // Линза. Пока идёт поток — разгорается вместе с разгоном, иначе тлеет.
+      tBox(7, -2.2, b - 8, 4.4, '#2f2d28', '#23221e', 1.2);
       const on = t.stream ? 0.7 + 0.3 * (t.stream.spin || 0) : 0.45;
-      const g = ctx.createRadialGradient(nose - 2.5, 0, 0, nose - 2.5, 0, 5);
-      g.addColorStop(0, `rgba(${glow},${on})`);
-      g.addColorStop(1, `rgba(${glow},0)`);
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(nose - 2.5, 0, 5, 0, Math.PI * 2); ctx.fill();
+      tGlow(b - 2, 0, 4.5, glow, on);
+    
     }
   },
 
@@ -3790,7 +3768,7 @@ const TURRETS = {
       // Время до смерти СЧИТАЕМ тем же законом, что и стреляем: урон
       // растёт вместе с заморозкой, и записанное числом оно соврало бы
       // при первой же правке dps/brittle/chillTime.
-      let hp = CONFIG.hp, chill = 0, t = 0;
+      let hp = loadoutHp(), chill = 0, t = 0;
       while (hp > CONFIG.hpEpsilon && t < 60){
         hp -= c.dps * freezeMult(chill) / 60;
         chill = Math.min(1, chill + 1 / 60 / c.chillTime);
@@ -3811,47 +3789,42 @@ const TURRETS = {
        круглая капля с трубкой-соплом, весь объём в корпусе; у фриза
        короткая гранёная казна, весь объём в стволе.                  */
     drawTurret(t, barrel){
-      const cfg = CONFIG.freeze;
+      const b = barrel, cfg = CONFIG.freeze;
+      /* Оригинал: тело-клин и КОРОТКИЙ вынос с плоским раструбом.
+         Пропорция как у огнемёта: корпус занимает основную длину, наружу
+         торчит 14. Клин в цвете стороны, серым идут накладка и раструб —
+         на фотографии так же.                                         */
+      const out = 16, tip = b - 5;
 
-      // Ствол рисуем ПЕРВЫМ: казна должна перекрыть его основание,
-      // иначе на стыке видно шов.
-      const flare = barrel - 5;
-      ctx.fillStyle = '#43505a';
-      ctx.beginPath();
-      ctx.moveTo(2, -4.6);      ctx.lineTo(flare, -2.2);
-      ctx.lineTo(barrel, -4.5); ctx.lineTo(barrel, 4.5);
-      ctx.lineTo(flare, 2.2);   ctx.lineTo(2, 4.6);
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = '#23221e';
-      ctx.lineWidth = 1.6; ctx.stroke();
+      tPoly([[out,-2.6],[tip,-1.8],[b,-4.4],[b,4.4],[tip,1.8],[out,2.6]],
+            '#43505a', '#23221e', 1.4);
+      tPoly([[-12,-4],[-10,-7],[0,-7],[8,-5.5],[out,-4],
+             [out,4],[8,5.5],[0,7],[-10,7],[-12,4]], t.paint, '#23221e', 2);
+      tPoly([[-8,-3.4],[0,-4],[8,-3],[out-1,-2.2],[out-1,2.2],[8,3],[0,4],[-8,3.4]],
+            'rgba(60,72,82,.6)');
 
-      // Рёбра охлаждения на клине — поперёк ствола.
-      ctx.fillStyle = '#2f3941';
-      for (let i = 0; i < 4; i++){
-        const x = 8 + i * ((flare - 10) / 3);
-        const h = 4.4 - (x - 2) / (flare - 2) * 2;
-        ctx.fillRect(x, -h, 1.8, h * 2);
+      ctx.fillStyle = 'rgba(35,34,30,.4)';              // рёбра поперёк
+      for (let i = 0; i < 6; i++){
+        const x = -6 + i * 3.4, h = 6.4 - Math.max(0, x + 6) * 0.19;
+        ctx.fillRect(x, -h, 1.3, h * 2);
       }
 
-      // Казённая коробка со срезанными углами — гранёная, как у изиды,
-      // но короткая: весь объём фриза ушёл в ствол.
-      ctx.fillStyle = t.paint;
-      ctx.beginPath();
-      [[-12, -5], [-9, -8.5], [1, -8.5], [5, -5],
-       [5, 5], [1, 8.5], [-9, 8.5], [-12, 5]]
-        .forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = '#23221e';
-      ctx.lineWidth = 2; ctx.stroke();
+      // Хребет из двух нитей, сходящихся к носу: одна по оси читалась
+      // швом, две дают объём и показывают направление.
+      for (const side of [-1, 1])
+        tHair(() => {
+          ctx.beginPath();
+          ctx.moveTo(-9, side * 3.2); ctx.lineTo(out - 1, 0);
+        }, 'rgba(200,214,224,.5)');
 
-      // Ледяные прорези по бортам казны.
-      ctx.fillStyle = `rgba(${cfg.glow},.8)`;
-      for (const side of [-1, 1]) ctx.fillRect(-7, side * 6.5 - 1, 9, 2);
+      for (const side of [-1, 1])                        // голубые прорези
+        tHair(() => {
+          ctx.beginPath();
+          ctx.moveTo(-6, side * 5.6); ctx.lineTo(1, side * 5.9);
+        }, `rgba(${cfg.glow},.9)`);
 
-      // Морозная точка у среза — видно, что пушка холодная, даже когда
-      // молчит. Тот же приём, что запальник у огнемёта.
-      ctx.fillStyle = `rgba(${cfg.glow},.9)`;
-      ctx.beginPath(); ctx.arc(barrel - 1.5, 0, 1.8, 0, Math.PI * 2); ctx.fill();
+      tDot(b - 1.6, 0, 1.6, `rgba(${cfg.glow},.9)`);     // морозная точка
+    
     }
   }
 };
@@ -3886,6 +3859,14 @@ function drawTank(t, isPlayer, preview = false){
       [-hl + nD, -nHw], [-hl, -nHw],           // дно выреза и выход
       [-hl, -hw]                               // корма, левый угол
     ];
+  } else if (t.hull.shape === 'sloped'){
+    // Викинг: скошены ВСЕ четыре угла — наклонная броня из оригинала.
+    // Корпус широкий и близкий к квадрату, поэтому срезы крупные: на
+    // такой ширине мелкая фаска просто не читается.
+    outline = [
+      [ hl, -hw + 11], [ hl - 12, -hw], [-hl + 8, -hw], [-hl, -hw + 8],
+      [-hl,  hw -  8], [-hl +  8,  hw], [ hl - 12,  hw], [ hl,  hw - 11]
+    ];
   } else {
     // Хорнет: простой прямоугольник со срезанными носовыми углами.
     outline = [
@@ -3913,18 +3894,60 @@ function drawTank(t, isPlayer, preview = false){
   const sh = t.high ? 7 : 3;
   hullPath(sh, sh); ctx.fill();
 
-  // Гусеницы по бокам, прямые.
-  ctx.fillStyle = '#2f2e29';
-  for (const side of [-1, 1]){
-    const yOut = side * (hw + 2), yIn = side * (hw - 5);
-    ctx.fillRect(-hl - 1, Math.min(yIn, yOut), L + 2, Math.abs(yOut - yIn));
+  /* ГУСЕНИЦЫ. У каждого корпуса свои — сверху это первое, по чему они
+     отличаются, раньше формы:
 
-    // Траки — поперечные насечки, чтобы гусеница читалась.
-    ctx.strokeStyle = 'rgba(200,200,200,.13)';
-    ctx.lineWidth = 1;
-    for (let i = 1; i < 8; i++){
-      const x = -hl + L * (i / 8);
-      ctx.beginPath(); ctx.moveTo(x, yIn); ctx.lineTo(x, yOut); ctx.stroke();
+       Хорнет — крупные редкие траки, как на оригинале;
+       Васп   — мелкая частая лента, понтоны выходят ВПЕРЁД;
+       Викинг — широкая лента, ножки вперёд и чуть назад.
+
+     Вылет вперёд не симметричен вылету назад намеренно: по нему видно,
+     где у корпуса перёд, даже когда башня смотрит вбок.              */
+  const TR = {
+    boxy:    { tw: 5, outF: 1, outB: 1, links:  6, chunky: true  },
+    notched: { tw: 5, outF: 3, outB: 0, links: 11, chunky: false },
+    sloped:  { tw: 8, outF: 7, outB: 2, links: 12, chunky: false }
+  }[t.hull.shape] || { tw: 5, outF: 1, outB: 1, links: 8, chunky: false };
+
+  const TL = L + TR.outF + TR.outB, TX = -hl - TR.outB;
+  for (const side of [-1, 1]){
+    const yOut = side * (hw + 2), yIn = side * (hw - TR.tw);
+    const ty = Math.min(yIn, yOut), th = Math.abs(yOut - yIn);
+    ctx.fillStyle = '#2f2e29';
+    ctx.fillRect(TX, ty, TL, th);
+
+    if (TR.chunky){
+      // Крупные траки: светлые бруски с зазорами, а не насечки.
+      ctx.fillStyle = 'rgba(190,190,185,.20)';
+      const step = TL / TR.links;
+      for (let i = 0; i < TR.links; i++)
+        ctx.fillRect(TX + step * i + 1.2, ty + 0.8, step - 2.4, th - 1.6);
+    } else {
+      ctx.strokeStyle = 'rgba(200,200,200,.13)';
+      ctx.lineWidth = 1;
+      for (let i = 1; i < TR.links; i++){
+        const x = TX + TL * (i / TR.links);
+        ctx.beginPath(); ctx.moveTo(x, ty); ctx.lineTo(x, ty + th); ctx.stroke();
+      }
+    }
+  }
+
+  // Броневые понтоны поверх гусениц — те самые «ножки», которые торчат
+  // вперёд у Васпа и Викинга.
+  if (TR.outF > 2){
+    for (const side of [-1, 1]){
+      const yA = side * (hw + 1.5), yB = side * (hw - TR.tw + 1.5);
+      const pod = [[TX + 2, yA], [TX, yA * 0.72], [TX, yB],
+                   [hl + TR.outF, yB], [hl + TR.outF, yA * 0.72],
+                   [hl + TR.outF - 5, yA]];
+      ctx.beginPath();
+      pod.forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+      ctx.closePath();
+      ctx.fillStyle = t.paint;
+      ctx.fill();
+      ctx.strokeStyle = '#23221e';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
     }
   }
 
@@ -3953,6 +3976,86 @@ function drawTank(t, isPlayer, preview = false){
   // когда танк едет прямо на тебя.
   ctx.fillStyle = 'rgba(35,34,30,.35)';
   ctx.fillRect(-hl + 2, -hw + 4, 5, W - 8);
+
+  /* МЕЛКИЕ ДЕТАЛИ. Своя горсть у каждого корпуса — по оригинальным
+     картинкам. Без них корпуса сверху отличаются только габаритом, и
+     на дистанции боя это почти незаметно.                            */
+  const rib = (x1, x2, y, a) => {
+    ctx.strokeStyle = `rgba(35,34,30,${a})`;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
+  };
+  const louver = (x, y0, y1, n) => {       // жабры-воздухозаборники
+    ctx.strokeStyle = 'rgba(35,34,30,.5)';
+    ctx.lineWidth = 1.4;
+    for (let i = 0; i < n; i++){
+      const px = x + i * 2.6;
+      ctx.beginPath(); ctx.moveTo(px, y0); ctx.lineTo(px, y1); ctx.stroke();
+    }
+  };
+  const lamp = (x, y) => {                 // ходовой огонь
+    ctx.fillStyle = 'rgba(120,214,240,.9)';
+    ctx.fillRect(x - 2.5, y - 1.1, 5, 2.2);
+  };
+
+  if (t.hull.shape === 'boxy'){
+    // Хорнет: рубка-фонарь у носа, рёбра по спине, решётка в бампере,
+    // жабры на корме.
+    ctx.fillStyle = 'rgba(35,34,30,.30)';
+    ctx.beginPath();
+    ctx.moveTo(hl - 20, -6); ctx.lineTo(hl - 6, -4.5);
+    ctx.lineTo(hl - 6, 4.5); ctx.lineTo(hl - 20, 6);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(190,200,205,.25)';
+    ctx.fillRect(hl - 17, -3.2, 8, 6.4);
+    for (const side of [-1, 1]) rib(-hl + 7, hl - 8, side * (hw - 4), 0.35);
+    rib(-hl + 7, hl - 22, 0, 0.18);
+    louver(-hl + 5, -hw + 5, hw - 5, 4);
+    ctx.fillStyle = 'rgba(35,34,30,.45)';
+    for (let i = 0; i < 3; i++) ctx.fillRect(hl - 4, -6 + i * 4.5, 3, 3);
+    lamp(hl - 3, -hw + 3); lamp(hl - 3, hw - 3);
+  } else if (t.hull.shape === 'notched'){
+    // Васп: круглый люк-погон, гранёные плиты по бортам, жабры у кормы.
+    ctx.strokeStyle = 'rgba(35,34,30,.45)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(2, 0, 7, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(35,34,30,.16)';
+    ctx.beginPath(); ctx.arc(2, 0, 7, 0, Math.PI * 2); ctx.fill();
+    for (const side of [-1, 1]){
+      ctx.strokeStyle = 'rgba(35,34,30,.35)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(hl - 4, side * (hw - 4));
+      ctx.lineTo(hl - 16, side * (hw - 8));
+      ctx.lineTo(-hl + 10, side * (hw - 8));
+      ctx.stroke();
+    }
+    louver(-hl + 9, -hw + 5, -2.5, 3);
+    louver(-hl + 9, 2.5, hw - 5, 3);
+    lamp(hl - 9, 0);
+  } else if (t.hull.shape === 'sloped'){
+    // Викинг: плита с погоном башни, рёбра наклонной брони, жабры и
+    // ходовые огни по бортам — по три с каждой стороны, как в оригинале.
+    ctx.fillStyle = 'rgba(35,34,30,.28)';
+    ctx.fillRect(-hl + 9, -hw + 9, L - 22, W - 18);
+    ctx.strokeStyle = 'rgba(35,34,30,.45)';
+    ctx.lineWidth = 1.4;
+    for (const side of [-1, 1]){
+      ctx.beginPath();
+      ctx.moveTo(hl - 12, side * hw); ctx.lineTo(hl, side * (hw - 11));
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-hl + 8, side * hw); ctx.lineTo(-hl, side * (hw - 8));
+      ctx.stroke();
+    }
+    louver(-hl + 4, -hw + 11, hw - 11, 3);
+    ctx.strokeStyle = 'rgba(35,34,30,.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(-t.hull.turretBack, 0, 9, 0, Math.PI * 2); ctx.stroke();
+    for (const side of [-1, 1])
+      for (const px of [hl + 1, -2, -hl + 7]) lamp(px + 3, side * (hw - 3.5));
+  }
+
   ctx.restore();
 
   // --- башня с рельсой ---
@@ -4033,9 +4136,12 @@ function drawTank(t, isPlayer, preview = false){
   // Деления заполняются ДРОБНО. Рельса снимает деление целиком, а твинс
   // грызёт по четверти — при заливке «всё или ничего» полоска стояла бы
   // неподвижно три попадания подряд и врала бы про состояние боя.
-  const pipW = 13, gap = 3;
-  const total = CONFIG.hp * pipW + (CONFIG.hp - 1) * gap;
-  if (!preview) for (let i = 0; i < CONFIG.hp; i++){
+  // Делений столько, сколько держит КОРПУС: у Викинга их четыре, и это
+  // видно раньше, чем он успеет выстрелить.
+  const maxHp = t.maxHp;
+  const pipW = maxHp > 3 ? 9 : 13, gap = 3;
+  const total = maxHp * pipW + (maxHp - 1) * gap;
+  if (!preview) for (let i = 0; i < maxHp; i++){
     const x = t.x - total / 2 + i * (pipW + gap);
     const fill = clamp(t.hp - i, 0, 1);
     ctx.fillStyle = 'rgba(35,34,30,.22)';
@@ -4718,8 +4824,9 @@ function renderGarageStats(){
   // Строку про пушку пишет сама пушка: у рельсы и твинса важны РАЗНЫЕ
   // числа, и общий шаблон на двоих врал бы про обе.
   garageStats.innerHTML =
-    `Корпус <b>${h.name}</b> · скорость <b>${h.speed}</b> · ` +
-    `поворот <b>${h.turn}</b> рад/с · хитбокс <b>${h.radius}</b><br>` +
+    `Корпус <b>${h.name}</b> · здоровье <b>${h.hp || CONFIG.hp}</b> · ` +
+    `скорость <b>${h.speed}</b> · поворот <b>${h.turn}</b> рад/с · ` +
+    `хитбокс <b>${h.radius}</b><br>` +
     TURRETS[LOADOUT.turret].stats();
 }
 
