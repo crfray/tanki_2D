@@ -104,5 +104,11 @@ enemies, destroy each unwieldy heavy tank one by one.
 
 Референс: `300px-Turret_smoky.png` в этой же папке.
 
+### Перерисовка по оригиналу
+
+Казна почти прямоугольная, 21 на 14: фаски маленькие, форма геометрическая
+— на фотографии это брусок, а не клин. На корме пульт с кнопками, в
+середине круглый люк. Ствол тонкий, на конце прямоугольное сопло.
+
 См. [railgun](../railgun/railgun.md), [twins](../twins/twins.md),
 [hornet](../../hulls/hornet.md), [wasp](../../hulls/wasp.md).
